@@ -1,0 +1,25 @@
+.Dd September 17, 2026
+.Dt ARCSYNC 1
+.Os
+.Sh NAME
+.Nm arcsync
+.Nd archive a photo library to a hybrid CD/DVD ISO
+.Sh SYNOPSIS
+.Nm
+.Op Fl nqv
+.Op Fl -json
+.Op Fl -dir Ar path
+.Op Fl -out Ar path
+.Op Fl -media Ar type
+.Op Fl -burn
+.Op Fl -help
+.Op Fl -version
+.Sh DESCRIPTION
+.Nm
+copies photos into a dated tree, builds a static HTML gallery, and writes a
+hybrid ISO via
+.Xr hdiutil 1 .
+This man page is a scaffold; full ICLOUD section lands with Photos support.
+.Sh AUTHORS
+Kevin Murphy
+.Aq somerleddesign@gmail.com

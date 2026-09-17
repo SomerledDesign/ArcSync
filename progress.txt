@@ -1,0 +1,5 @@
+=== SCAFFOLD — 2026-09-17 ===
+Status: COMPLETE (steps 1–2)
+- Makefile, banner.s / banner_x86_64.s, main.c, args.c, arcsync.h
+- MIT LICENSE, README, DECISIONS.md, stub man + homebrew formula
+Next: PRD §14 step 3 — --dir walker + date-tree copy

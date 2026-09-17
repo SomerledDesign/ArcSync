@@ -1,0 +1,8 @@
+/arcsync
+*.o
+*.dSYM/
+/dist/
+/build/
+.DS_Store
+*.iso
+/tmp-*
