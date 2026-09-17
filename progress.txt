@@ -1,5 +1,6 @@
-=== SCAFFOLD — 2026-09-17 ===
-Status: COMPLETE (steps 1–2)
-- Makefile, banner.s / banner_x86_64.s, main.c, args.c, arcsync.h
-- MIT LICENSE, README, DECISIONS.md, stub man + homebrew formula
-Next: PRD §14 step 3 — --dir walker + date-tree copy
+=== PIPELINE — 2026-09-17 ===
+Status: COMPLETE for --dir → thumbs → HTML → hdiutil ISO → --burn flag
+- util/fs_dir/copy/thumbs/html/iso/pipeline/photos_db
+- make test PASS (ISO attach + index.html)
+- Photos mode: copies DB, ZASSET discovery, local originals only; albums = Library bucket
+Next polish: album junction membership, derivative search, EXIF dates

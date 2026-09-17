@@ -1,5 +1,5 @@
 CC      ?= cc
-CFLAGS  ?= -std=c99 -Os -Wall -Wextra -Werror -fno-exceptions
+CFLAGS  ?= -std=c99 -Os -Wall -Wextra -Werror -fno-exceptions -D_DARWIN_C_SOURCE
 LDFLAGS ?= -lsqlite3 -framework CoreFoundation -framework ImageIO -framework CoreGraphics
 PREFIX  ?= /usr/local
 
@@ -12,7 +12,7 @@ else
   $(error unsupported arch $(UNAME_M); need arm64 or x86_64 Darwin)
 endif
 
-SRCS := src/main.c src/args.c
+SRCS := src/main.c src/args.c src/util.c src/fs_dir.c src/copy.c src/thumbs.c src/html.c src/iso.c src/pipeline.c src/photos_db.c
 OBJS := $(SRCS:.c=.o) src/banner.o
 
 .PHONY: all clean strip install check-size test dist help
@@ -47,8 +47,15 @@ install: arcsync
 test: arcsync
 	./arcsync --version >/dev/null
 	./arcsync --help >/dev/null
-	./arcsync --json -q | grep -q scaffold
-	@echo "make test: scaffold OK"
+	./arcsync -n --dir testdata/vacation --media none --out /tmp/arcsync-test.iso
+	./arcsync --dir testdata/vacation --media none --force --out /tmp/arcsync-test.iso
+	@test -f /tmp/arcsync-test.iso
+	@MNT=$$(hdiutil attach -nobrowse /tmp/arcsync-test.iso | awk '/\/Volumes\//{print $$NF; exit}'); \
+	  test -n "$$MNT"; \
+	  test -f "$$MNT/index.html"; \
+	  test -d "$$MNT/media"; \
+	  hdiutil detach "$$MNT" >/dev/null; \
+	  echo "make test: ISO mount OK"
 
 clean:
 	rm -f arcsync $(OBJS) src/banner.o

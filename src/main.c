@@ -34,30 +34,5 @@ main(int argc, char **argv)
 	if (opts.verbose && !opts.json)
 		arcsync_banner();
 
-	/*
-	 * Scaffold only (PRD section 14 steps 1-2). Pipeline lands next:
-	 * --dir walker -> thumbs -> HTML -> hdiutil -> optional --burn.
-	 */
-	if (!opts.quiet) {
-		fprintf(stderr,
-		    "arcsync: scaffold ready (args + banner). "
-		    "No archive path yet — pass --dir when the pipeline lands.\n");
-		if (opts.dir)
-			fprintf(stderr, "arcsync: would use --dir %s\n", opts.dir);
-		else if (opts.library)
-			fprintf(stderr, "arcsync: would use --library %s\n", opts.library);
-		else
-			fprintf(stderr,
-			    "arcsync: default library would be "
-			    "~/Pictures/Photos Library.photoslibrary\n");
-		fprintf(stderr, "arcsync: out=%s media=%d burn=%d dry_run=%d\n",
-		    opts.out, (int)opts.media, opts.burn, opts.dry_run);
-	}
-
-	if (opts.json) {
-		printf("{\"version\":\"%s\",\"scaffold\":true,\"out\":\"%s\",\"burn\":%s}\n",
-		    ARCSYNC_VERSION, opts.out, opts.burn ? "true" : "false");
-	}
-
-	return 0;
+	return arcsync_run_pipeline(&opts);
 }

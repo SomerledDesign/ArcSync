@@ -3,6 +3,7 @@
 - Owner: Jarvis
 - Repo: https://github.com/SomerledDesign/ArcSync (private)
 - Local: Dropbox/Penus/iWasCoding/ArcSync
-- Done: PRD v1.4; scaffold Makefile + banner.s + args + main
-- Next: `--dir` walker → date tree copy → thumbs → HTML → hdiutil → `--burn`
-- Hard: ≤233 KiB stripped; no PhotoKit
+- Status: **v1 --dir pipeline complete**; Photos.sqlite reader present (Library album; user-album junction deferred)
+- Binary ~72 KiB stripped (≤233 KiB)
+- `make test` mounts hybrid ISO from testdata/vacation
+- Next polish: richer Photos album tree via junction; `--cloud derivative` file hunt; EXIF capture dates

@@ -8,18 +8,59 @@
 .Nm
 .Op Fl nqv
 .Op Fl -json
-.Op Fl -dir Ar path
+.Op Fl -dir Ar path | Fl -library Ar path
 .Op Fl -out Ar path
 .Op Fl -media Ar type
+.Op Fl -split
 .Op Fl -burn
+.Op Fl -cloud Ar mode
 .Op Fl -help
 .Op Fl -version
 .Sh DESCRIPTION
 .Nm
-copies photos into a dated tree, builds a static HTML gallery, and writes a
-hybrid ISO via
+copies photos into a dated
+.Pa media/YYYY/MM/DD/
+tree, builds a static HTML gallery, and writes a hybrid ISO via
 .Xr hdiutil 1 .
-This man page is a scaffold; full ICLOUD section lands with Photos support.
+With
+.Fl -burn ,
+it then runs
+.Nm hdiutil burn
+on the ISO.
+.Sh ICLOUD AND OPTIMIZED LIBRARIES
+.Nm
+copies files that are already on this Mac. It does not download from iCloud.
+For family libraries using Optimize Mac Storage, run:
+.Pp
+.Dl arcsync -n --cloud fail
+.Pp
+then set Photos to Download Originals to this Mac overnight, re-check with dry-run,
+then burn with
+.Fl -cloud fail .
+See the PRD for the full overnight recipe.
+.Sh EXIT STATUS
+.Bl -tag -width Ds
+.It 0
+Success
+.It 1
+Usage error
+.It 2
+Library unreadable / schema unrecognized
+.It 3
+No assets matched
+.It 4
+Staging I/O error
+.It 5
+Over capacity without
+.Fl -split
+.It 6
+hdiutil failed
+.It 8
+.Fl -cloud fail
+and non-local originals present
+.El
 .Sh AUTHORS
 Kevin Murphy
 .Aq somerleddesign@gmail.com
+.Sh SEE ALSO
+.Xr hdiutil 1
