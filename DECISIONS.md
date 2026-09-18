@@ -12,4 +12,4 @@ Recorded 2026-09-17 with Kevin:
 
 FDA: local-tools session may lack Full Disk Access for Photos.sqlite. Grant FDA to Terminal/Cursor before Photos mode.
 
-| Easter egg | — | Hidden `--demo`: ANSI starfield + spinning Win32 (BBS/demoscene nod); not in --help |
+| Easter egg | — | `arcsync 1998` (also `--demo`): 3D tumbling wireframe Win32 in starfield; not in --help |

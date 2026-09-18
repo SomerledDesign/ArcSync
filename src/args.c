@@ -188,6 +188,12 @@ arcsync_parse_args(int argc, char **argv, arcsync_opts_t *opts)
 	if (opts->help || opts->version || opts->demo)
 		return 0;
 
+	/* demoscene egg: arcsync 1998 */
+	if (optind < argc && strcmp(argv[optind], "1998") == 0) {
+		opts->demo = 1;
+		return 0;
+	}
+
 	if (opts->library && opts->dir) {
 		fprintf(stderr, "arcsync: --library and --dir are mutually exclusive\n");
 		return 1;
