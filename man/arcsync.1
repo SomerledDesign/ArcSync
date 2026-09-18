@@ -1,6 +1,6 @@
 .Dd September 17, 2026
 .Dt ARCSYNC 1
-.Os
+.Os Darwin
 .Sh NAME
 .Nm arcsync
 .Nd archive a photo library to a hybrid CD/DVD ISO
@@ -8,59 +8,309 @@
 .Nm
 .Op Fl nqv
 .Op Fl -json
-.Op Fl -dir Ar path | Fl -library Ar path
+.Op Fl -force
+.Op Fl -library Ar path | Fl -dir Ar path
 .Op Fl -out Ar path
-.Op Fl -media Ar type
+.Op Fl -media Ar cd Ns | Ns Ar dvd Ns | Ns Ar dvd-dl Ns | Ns Ar bd Ns | Ns Ar none
 .Op Fl -split
 .Op Fl -burn
-.Op Fl -cloud Ar mode
+.Op Fl -volume-name Ar name
+.Op Fl -from Ar YYYY-MM-DD
+.Op Fl -to Ar YYYY-MM-DD
+.Op Fl -cloud Ar skip Ns | Ns Ar derivative Ns | Ns Ar fail
+.Op Fl -edited
+.Op Fl -thumb-size Ar px
+.Op Fl -title Ar text
+.Op Fl -include-hidden
+.Op Fl -include-trashed
 .Op Fl -help
 .Op Fl -version
 .Sh DESCRIPTION
 .Nm
-copies photos into a dated
-.Pa media/YYYY/MM/DD/
-tree, builds a static HTML gallery, and writes a hybrid ISO via
+reads a macOS Photos library or a plain photo folder, copies the media into a
+dated filesystem tree, builds a static HTML gallery, and wraps the result in a
+hybrid CD/DVD/Blu-ray
+.Pa .iso
+via
 .Xr hdiutil 1 .
 With
 .Fl -burn ,
 it then runs
 .Nm hdiutil burn
-on the ISO.
+on that ISO.
+.Pp
+It is a small terminal tool: no GUI, no PhotoKit, no iCloud download inside the
+binary. Originals are copied byte-for-byte when they are already on this Mac.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl -library Ar path
+Photos library bundle
+.Pq Pa .photoslibrary .
+Default if neither
+.Fl -library
+nor
+.Fl -dir
+is given:
+.Pa ~/Pictures/Photos\ Library.photoslibrary .
+.It Fl -dir Ar path
+Plain directory tree of images/videos instead of Photos.
+Mutually exclusive with
+.Fl -library .
+Album pages follow the folder tree.
+.It Fl -out Ar path
+Output ISO path
+.Pq default: Pa ./arcsync-YYYYMMDD.iso .
+With
+.Fl -split ,
+this is the stem:
+.Pa NAME-1.iso , NAME-2.iso , ... .
+.It Fl -media Ar type
+Capacity profile:
+.Ar cd
+(680 MiB),
+.Ar dvd
+(4300 MiB, default),
+.Ar dvd-dl
+(7900 MiB),
+.Ar bd
+(23000 MiB), or
+.Ar none
+(unlimited).
+.It Fl -split
+If the staged payload exceeds media capacity, emit multiple self-contained ISOs
+instead of failing.
+.It Fl -burn
+After writing the ISO, burn it with
+.Nm hdiutil burn
+(optical drive required). The ISO file is kept.
+.It Fl -volume-name Ar name
+Disc volume label. Default
+.Pa ARCSYNC_YYYYMMDD .
+.It Fl -from Ar YYYY-MM-DD , Fl -to Ar YYYY-MM-DD
+Inclusive capture-date filter (local civil date).
+.It Fl -cloud Ar mode
+What to do when a Photos original is not on disk:
+.Ar skip
+(default),
+.Ar derivative ,
+or
+.Ar fail .
+See
+.Sx ICLOUD AND OPTIMIZED LIBRARIES .
+.It Fl -edited
+Prefer a local edited/rendered derivative when present.
+.It Fl -thumb-size Ar px
+Thumbnail long edge in pixels (96–640, default 240).
+.It Fl -title Ar text
+Gallery
+.Li <title>
+and H1 (default: volume name).
+.It Fl -include-hidden
+Include Photos Hidden album assets.
+.It Fl -include-trashed
+Include Recently Deleted.
+.It Fl n , Fl -dry-run
+Scan and print the plan; write nothing.
+.It Fl v
+Verbose: banner plus per-file copy lines on stderr.
+.It Fl q
+Quiet: errors and final summary only.
+.It Fl -json
+Final summary as one JSON object on stdout.
+.It Fl -force
+Overwrite an existing
+.Fl -out
+path.
+.It Fl h , Fl -help
+Print usage and exit 0.
+.It Fl -version
+Print the version banner (assembly souvenir) and exit 0.
+.El
 .Sh ICLOUD AND OPTIMIZED LIBRARIES
 .Nm
 copies files that are already on this Mac. It does not download from iCloud.
-For family libraries using Optimize Mac Storage, run:
+That is deliberate: a full original pull can take all night and needs Photos.app,
+your Apple ID, and enough free disk. The tool will not pretend a preview is a
+camera file.
+.Pp
+There are two usual setups.
+.Ss Family and amateur libraries (iCloud Photos, Optimize Mac Storage)
+Most rows in Photos are real. Most files under
+.Pa originals/
+are not. Photos keeps a small preview on the Mac and the camera original in
+iCloud. Burning that library as-is gives you an index of names and a handful of
+real files. Do not do that if you want an archive.
+.Pp
+Overnight pull, morning burn:
+.Bl -enum
+.It
+Confirm free space. You need enough room for every original plus a little extra.
+In Photos, open a photo and use Get Info if you need a feel for size, or run:
 .Pp
 .Dl arcsync -n --cloud fail
 .Pp
-then set Photos to Download Originals to this Mac overnight, re-check with dry-run,
-then burn with
-.Fl -cloud fail .
-See the PRD for the full overnight recipe.
+The dry-run lists how many files are local originals and how many are not on
+this Mac. If the missing/cloud-only count is large, free disk before the next
+step.
+.It
+In Photos: Settings (or Preferences) → iCloud →
+.Sy Download Originals to this Mac .
+.It
+Leave the Mac awake, plugged in, on the home network. Close the lid only if it
+is set to stay awake on power. Photos will work through the library. This can
+run for hours on a family library and overnight on a big one. A spinning
+progress or a quiet Photos window is normal.
+.It
+In the morning, run the dry-run again:
+.Pp
+.Dl arcsync -n --cloud fail
+.Pp
+You want missing/cloud-only as close to zero as it will go. Shared Albums and
+some screenshots may never land as originals; that is Photos, not
+.Nm .
+When fail would succeed (exit 0 on dry-run), burn:
+.Pp
+.Dl arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso
+.Pp
+.Fl -cloud fail
+is the family-photographer flag: if anything selected is still only in the
+cloud,
+.Nm
+refuses to write an ISO rather than quietly omit pictures.
+.It
+After the ISO is mounted and spot-checked, you may switch Photos back to
+Optimize Mac Storage if you need the disk space. The disc is the archive;
+iCloud can go back to previews. Do not delete the library until you have opened
+.Pa index.html
+on the disc and opened two or three full images from different years.
+.El
+.Ss Working photographers (originals already on a NAS, RAID, or folder)
+If the camera files already live in a directory tree, skip Photos:
+.Pp
+.Dl arcsync --dir /Volumes/NAS/Jobs/2026 --media none --out job.iso
+.Pp
+If you use Photos only as a browser and the masters are elsewhere, point
+.Fl -dir
+at the masters. Album HTML will follow the folder tree. That is the 2000-era
+workflow: the files were next to the machine because there was no cloud to hide
+them in.
+.Ss Fl -cloud skip and Fl -cloud derivative
+.Fl -cloud skip
+(default) copies only local originals and skips anything still in iCloud.
+Useful for a test burn.
+.Fl -cloud derivative
+is intended to fill holes with local previews and mark those rows
+.Li quality=derivative
+in
+.Pa manifest.tsv .
+Treat that as a slideshow, not an archive. Family users who want the real files
+should use
+.Fl -cloud fail
+after the overnight download, not derivative as a shortcut.
+.Ss osxphotos
+A third-party tool can ask Photos to fetch individual missing originals. It is
+not part of
+.Nm ,
+it can crash Photos, and it needs extra permissions. Prefer the Download
+Originals setting above unless you already know that tool.
 .Sh EXIT STATUS
 .Bl -tag -width Ds
 .It 0
-Success
+Success (including dry-run).
 .It 1
-Usage error
+Usage / argument error.
 .It 2
-Library unreadable / schema unrecognized
+Library unreadable or schema unrecognized.
 .It 3
-No assets matched
+No assets matched filters.
 .It 4
-Staging I/O error
+Staging I/O error (disk full, permission, overwrite without
+.Fl -force ) .
 .It 5
-Over capacity without
+Payload exceeds media capacity and
 .Fl -split
+was not set (or a single file is larger than the media).
 .It 6
-hdiutil failed
+.Nm hdiutil
+failed.
+.It 7
+Interrupted (SIGINT/SIGTERM).
 .It 8
 .Fl -cloud fail
-and non-local originals present
+and at least one selected asset is not a local original.
 .El
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa ~/Pictures/Photos Library.photoslibrary
+Default Photos library.
+.It Pa $TMPDIR/arcsync-<pid>/
+Staging work root (removed on success).
+.It Pa ./arcsync-YYYYMMDD.iso
+Default output path.
+.El
+Terminal (or iTerm) may need Full Disk Access to read the Photos library
+bundle. The tool cannot grant this for you.
+.Sh DISC LAYOUT
+.Bd -literal -offset indent
+index.html                 landing page
+open-me.html               alias of index.html
+autorun.inf                Windows hint
+README.txt                 how to open this disc
+css/style.css
+thumbs/                    generated JPEG thumbnails
+albums/                    album / folder pages
+media/YYYY/MM/DD/          real files (byte-for-byte)
+by-date/index.html
+missing.txt
+manifest.tsv
+.Ed
+.Sh AUTORUN
+True auto-open of HTML is not possible on modern macOS. The hybrid image uses
+HFS open-folder so Finder shows the volume root, where
+.Pa index.html
+is obvious. On Windows,
+.Pa autorun.inf
+may prompt rather than auto-open; double-click
+.Pa index.html
+always works.
+.Sh PHOTOS LIBRARY
+The Photos
+.Pa Photos.sqlite
+schema is private and can change between major Photos versions. If the schema
+is unrecognized,
+.Nm
+exits 2 with a clear error rather than crashing. Close Photos.app if the
+database copy fails because of a lock.
+.Sh EXAMPLES
+See what is actually on this Mac before touching Photos settings:
+.Pp
+.Dl arcsync -n --cloud fail
+.Pp
+After originals have landed overnight:
+.Pp
+.Dl arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso
+.Pp
+Professional tree already on a NAS:
+.Pp
+.Dl arcsync --dir /Volumes/NAS/Masters --media none --out ~/Desktop/masters.iso
+.Pp
+Test burn of whatever happens to be local:
+.Pp
+.Dl arcsync --cloud skip --media none --out /tmp/test.iso
+.Pp
+Folder archive plus burn to optical media:
+.Pp
+.Dl arcsync --dir ~/Pictures/vacation --media dvd --burn --out ~/Desktop/vac.iso
+.Sh SEE ALSO
+.Xr hdiutil 1 ,
+Disk Utility,
+Photos,
+osxphotos
+.Pq third-party, optional .
 .Sh AUTHORS
 Kevin Murphy
 .Aq somerleddesign@gmail.com
-.Sh SEE ALSO
-.Xr hdiutil 1
+.Pp
+Win32 asm photo-CD tools, 1998; this is that program after the API grew up.
+.Sh LICENSE
+MIT

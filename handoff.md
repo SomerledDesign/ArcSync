@@ -7,3 +7,5 @@
 - Binary ~72 KiB stripped (≤233 KiB)
 - `make test` mounts hybrid ISO from testdata/vacation
 - Next polish: richer Photos album tree via junction; `--cloud derivative` file hunt; EXIF capture dates
+
+- 2026-09-17: Full ICLOUD/NAS recipes + OPTIONS/EXAMPLES shipped in `man/arcsync.1` (users need not read prd.md).

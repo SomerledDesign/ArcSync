@@ -32,6 +32,17 @@ make check-size
 
 MIT © Kevin Murphy <somerleddesign@gmail.com>
 
-## Spec
+## Docs for users
+
+```sh
+man arcsync          # after make install
+# or:
+man ./man/arcsync.1
+```
+
+Overnight iCloud download + NAS/`--dir` recipes live in the man page
+(**ICLOUD AND OPTIMIZED LIBRARIES**), not only in the developer PRD.
+
+## Spec (developers)
 
 See [`spec/prd.md`](spec/prd.md) and [`DECISIONS.md`](DECISIONS.md).
