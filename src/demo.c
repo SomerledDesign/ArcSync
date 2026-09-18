@@ -12,8 +12,8 @@
 #include <unistd.h>
 
 #define STAR_N 96
-#define MAX_FACE 2048
-#define MAX_VERT 4096
+#define MAX_FACE 4096
+#define MAX_VERT 12288
 #define FB_W 200
 #define FB_H 80
 
@@ -157,69 +157,113 @@ add_box(face_t *faces, int *nf, vec3 *verts, int *nv,
 }
 
 /*
- * 5x7 block glyphs — each '#' is a solid voxel cube.
- * Rows top→bottom; columns left→right.
+ * 11x15 block glyphs — denser voxels so shaded faces still read as letters.
+ * Rows top→bottom; columns left→right. '#' = solid cube.
  */
-static const char *GLYPH_W[7] = {
-	"#   #",
-	"#   #",
-	"# # #",
-	"## ##",
-	"#   #",
-	"#   #",
-	"#   #",
+#define GLYPH_W 11
+#define GLYPH_H 15
+
+static const char *GLYPH_W_ROWS[GLYPH_H] = {
+	"#         #",
+	"#         #",
+	"#         #",
+	"#         #",
+	"#    #    #",
+	"#    #    #",
+	"#   # #   #",
+	"#   # #   #",
+	"#  #   #  #",
+	"#  #   #  #",
+	"# #     # #",
+	"##       ##",
+	"#         #",
+	"#         #",
+	"#         #",
 };
-static const char *GLYPH_I[7] = {
-	" ### ",
-	"  #  ",
-	"  #  ",
-	"  #  ",
-	"  #  ",
-	"  #  ",
-	" ### ",
+static const char *GLYPH_I_ROWS[GLYPH_H] = {
+	"  #######  ",
+	"  #######  ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"    ###    ",
+	"  #######  ",
+	"  #######  ",
 };
-static const char *GLYPH_N[7] = {
-	"#   #",
-	"##  #",
-	"# # #",
-	"#  ##",
-	"#   #",
-	"#   #",
-	"#   #",
+static const char *GLYPH_N_ROWS[GLYPH_H] = {
+	"#         #",
+	"##        #",
+	"##        #",
+	"# #       #",
+	"# #       #",
+	"#  #      #",
+	"#  #      #",
+	"#   #     #",
+	"#   #     #",
+	"#    #    #",
+	"#    #    #",
+	"#     #   #",
+	"#      #  #",
+	"#       # #",
+	"#        ##",
 };
-static const char *GLYPH_3[7] = {
-	"#### ",
-	"    #",
-	"    #",
-	" ### ",
-	"    #",
-	"    #",
-	"#### ",
+static const char *GLYPH_3_ROWS[GLYPH_H] = {
+	" ######### ",
+	"###########",
+	"##       ##",
+	"         ##",
+	"         ##",
+	"        ## ",
+	"   ####### ",
+	"   ####### ",
+	"        ## ",
+	"         ##",
+	"         ##",
+	"##       ##",
+	"##       ##",
+	"###########",
+	" ######### ",
 };
-static const char *GLYPH_2[7] = {
-	"#### ",
-	"    #",
-	"    #",
-	" ### ",
-	"#    ",
-	"#    ",
-	"#####",
+static const char *GLYPH_2_ROWS[GLYPH_H] = {
+	" ######### ",
+	"###########",
+	"##       ##",
+	"         ##",
+	"         ##",
+	"        ## ",
+	"       ##  ",
+	"      ##   ",
+	"     ##    ",
+	"    ##     ",
+	"   ##      ",
+	"  ##       ",
+	" ##      ##",
+	"###########",
+	"###########",
 };
 
 static void
 add_glyph(face_t *faces, int *nf, vec3 *verts, int *nv,
-    const char *rows[7], float ox, float cell, float depth)
+    const char *rows[], float ox, float cell, float depth)
 {
 	int r, c;
-	float half = cell * 0.42f;
+	float half = cell * 0.48f;
 	float hz = depth * 0.5f;
-	for (r = 0; r < 7; r++) {
-		for (c = 0; c < 5; c++) {
+	float y_top = (GLYPH_H - 1) * 0.5f * cell;
+	for (r = 0; r < GLYPH_H; r++) {
+		for (c = 0; c < GLYPH_W; c++) {
 			if (rows[r][c] != '#')
 				continue;
 			add_box(faces, nf, verts, nv,
 			    ox + (c + 0.5f) * cell,
-			    (3.0f - r) * cell,
+			    y_top - r * cell,
 			    0.0f,
 			    half, half, hz);
 		}
@@ -229,19 +273,20 @@ add_glyph(face_t *faces, int *nf, vec3 *verts, int *nv,
 static void
 build_win32(vec3 *verts, int *nv, face_t *faces, int *nf)
 {
-	float cell = 0.28f;
-	float gap = 0.22f;
-	float depth = 0.38f;
-	float w = 5.0f * cell;
+	/* Smaller cells + more pixels = smoother silhouette; slightly larger overall. */
+	float cell = 0.155f;
+	float gap = 0.20f;
+	float depth = 0.34f;
+	float w = (float)GLYPH_W * cell;
 	float x = -(2.5f * w + 2.0f * gap);
 
 	*nv = 0;
 	*nf = 0;
-	add_glyph(faces, nf, verts, nv, GLYPH_W, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_I, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_N, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_3, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_2, x, cell, depth);
+	add_glyph(faces, nf, verts, nv, GLYPH_W_ROWS, x, cell, depth); x += w + gap;
+	add_glyph(faces, nf, verts, nv, GLYPH_I_ROWS, x, cell, depth); x += w + gap;
+	add_glyph(faces, nf, verts, nv, GLYPH_N_ROWS, x, cell, depth); x += w + gap;
+	add_glyph(faces, nf, verts, nv, GLYPH_3_ROWS, x, cell, depth); x += w + gap;
+	add_glyph(faces, nf, verts, nv, GLYPH_2_ROWS, x, cell, depth);
 }
 
 static void
@@ -286,9 +331,9 @@ project(const vec3 *v, int cols, int rows, int *sx, int *sy, float *depth)
 	float f;
 	if (z < 0.4f)
 		return 0;
-	f = 22.0f / z;
-	*sx = cols / 2 + (int)(v->x * f * (cols * 0.038f));
-	*sy = rows / 2 - (int)(v->y * f * (rows * 0.085f));
+	f = 26.0f / z;
+	*sx = cols / 2 + (int)(v->x * f * (cols * 0.042f));
+	*sy = rows / 2 - (int)(v->y * f * (rows * 0.095f));
 	*depth = z;
 	return 1;
 }
@@ -409,8 +454,8 @@ int
 arcsync_demo(void)
 {
 	star_t stars[STAR_N];
-	vec3 verts[MAX_VERT], rverts[MAX_VERT];
-	face_t faces[MAX_FACE];
+	vec3 *verts = NULL, *rverts = NULL;
+	face_t *faces = NULL;
 	int nv = 0, nf = 0;
 	unsigned rng = (unsigned)time(NULL) ^ (unsigned)getpid();
 	struct termios old;
@@ -424,6 +469,9 @@ arcsync_demo(void)
 	/* light in camera space, slightly above-left */
 	const float Lx = -0.35f, Ly = 0.55f, Lz = 0.75f;
 
+	verts = arcsync_xmalloc((size_t)MAX_VERT * sizeof(vec3));
+	rverts = arcsync_xmalloc((size_t)MAX_VERT * sizeof(vec3));
+	faces = arcsync_xmalloc((size_t)MAX_FACE * sizeof(face_t));
 	build_win32(verts, &nv, faces, &nf);
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 40 && ws.ws_row > 12) {
@@ -458,9 +506,9 @@ arcsync_demo(void)
 			if (stars[i].z < 0.08f)
 				star_reset(&stars[i], &rng, 1);
 		}
-		ax += 0.022f;
-		ay += 0.033f;
-		az += 0.014f;
+		ax += 0.0165f; /* 25% slower */
+		ay += 0.02475f;
+		az += 0.0105f;
 
 		memset(fb, 0, (size_t)cols * (size_t)rows);
 		for (i = 0; i < cols * rows; i++)
@@ -559,6 +607,9 @@ arcsync_demo(void)
 
 	free(fb);
 	free(zb);
+	free(verts);
+	free(rverts);
+	free(faces);
 	if (have_tty) {
 		printf("\033[?25h\033[0m\n");
 		fflush(stdout);
