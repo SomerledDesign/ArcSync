@@ -54,13 +54,6 @@ make && make test && make check-size
 ./arcsync --cloud skip --media none --out /tmp/test.iso
 ```
 
-Easter egg (demoscene nod):
-
-```sh
-./arcsync 1998
-# or: ./arcsync --demo
-```
-
 ## Hard constraints
 
 | Constraint | Requirement |
