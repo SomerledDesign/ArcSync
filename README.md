@@ -186,6 +186,23 @@ end
 
 No bottle required for v1; build-from-source is a handful of C files.
 
+
+## Windows (x86_64)
+
+Experimental MinGW port. Primary workflow is `--dir` (Photos.app is macOS-only).
+ISO images are written by an **in-tree ISO 9660 + Joliet** writer (`src/iso9660.c`);
+`--burn` is not wired yet. Thumbnails are placeholders until WIC lands.
+
+```sh
+# On Windows with MinGW-w64, or cross from macOS/Linux:
+make -f Makefile.mingw
+# produces arcsync.exe
+
+./arcsync.exe --dir D:\Photos\vacation --media dvd --out family.iso
+```
+
+The classic 233 KiB stripped limit applies to the Darwin build; Windows may be larger.
+
 ## Docs
 
 ```sh

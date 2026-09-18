@@ -1,0 +1,44 @@
+# Windows x86_64 (MinGW-w64) — native or cross
+#   make -f Makefile.mingw
+#   make -f Makefile.mingw CC=x86_64-w64-mingw32-gcc
+#
+# Default build uses --dir only (ARCSYNC_NO_SQLITE). To enable Photos.sqlite
+# reading, install mingw sqlite and: make -f Makefile.mingw WITH_SQLITE=1
+
+CC      ?= x86_64-w64-mingw32-gcc
+CFLAGS  ?= -std=c99 -Os -Wall -Wextra -Werror -D_WIN32 -DWIN32_LEAN_AND_MEAN
+LDFLAGS ?=
+
+ifeq ($(WITH_SQLITE),1)
+  LDFLAGS += -lsqlite3
+else
+  CFLAGS  += -DARCSYNC_NO_SQLITE
+endif
+
+SRCS := src/main.c src/args.c src/util.c src/fs_dir.c src/copy.c src/thumbs.c \
+	src/html.c src/iso.c src/iso9660.c src/pipeline.c src/photos_db.c src/demo.c
+OBJS := $(SRCS:.c=.o) src/banner_win64.o
+
+.PHONY: all clean strip check-size
+
+all: arcsync.exe
+
+arcsync.exe: $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+
+src/%.o: src/%.c src/arcsync.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/banner_win64.o: src/banner_win64.s
+	$(CC) -c -o $@ src/banner_win64.s
+
+strip: arcsync.exe
+	-x86_64-w64-mingw32-strip arcsync.exe 2>/dev/null || strip arcsync.exe
+
+check-size: strip
+	@sz=$$(wc -c < arcsync.exe | tr -d ' '); \
+	echo "arcsync.exe size: $$sz bytes (macOS limit 233KiB does not apply)"; \
+	true
+
+clean:
+	rm -f arcsync.exe $(OBJS) src/banner_win64.o

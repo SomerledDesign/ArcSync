@@ -1,8 +1,10 @@
 #include "arcsync.h"
 
+#ifndef _WIN32
 #include <CoreFoundation/CoreFoundation.h>
 #include <ImageIO/ImageIO.h>
 #include <CoreGraphics/CoreGraphics.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -37,6 +39,10 @@ write_placeholder_jpeg(const char *path)
 static int
 make_thumb(const char *src, const char *dst, int long_edge)
 {
+#ifdef _WIN32
+	(void)src; (void)long_edge;
+	return write_placeholder_jpeg(dst);
+#else
 	CFStringRef path;
 	CFURLRef url;
 	CGImageSourceRef src_ref;
@@ -127,6 +133,8 @@ done:
 	if (image) CGImageRelease(image);
 	return rc;
 }
+#endif /* !_WIN32 */
+
 
 int
 arcsync_make_thumbs(arcsync_catalog_t *cat, const arcsync_stage_t *st,

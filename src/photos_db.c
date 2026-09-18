@@ -1,5 +1,23 @@
 #include "arcsync.h"
 
+#ifdef ARCSYNC_NO_SQLITE
+
+#include <stdio.h>
+
+int
+arcsync_scan_photos(const char *library, const arcsync_opts_t *opts,
+    arcsync_catalog_t *cat)
+{
+	(void)library;
+	(void)opts;
+	(void)cat;
+	fprintf(stderr, "arcsync: Photos library mode not built (use --dir)\n");
+	return 2;
+}
+
+#else
+#include "arcsync.h"
+
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -238,3 +256,5 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_cat
 	(void)rc;
 	return 0;
 }
+
+#endif /* !ARCSYNC_NO_SQLITE */

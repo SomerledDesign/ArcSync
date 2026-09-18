@@ -1,19 +1,35 @@
 #include "arcsync.h"
 
+#ifndef _WIN32
 #include <copyfile.h>
+#else
+#include <windows.h>
+#endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <process.h>
+#define getpid _getpid
+#define unlink _unlink
+#endif
 
 int
 arcsync_stage_begin(arcsync_stage_t *st)
 {
 	const char *tmp = getenv("TMPDIR");
 	if (!tmp || !*tmp)
+		tmp = getenv("TEMP");
+	if (!tmp || !*tmp)
+#ifdef _WIN32
+		tmp = ".";
+#else
 		tmp = "/tmp";
+#endif
 	st->work_root = arcsync_aprintf("%s/arcsync-%d", tmp, (int)getpid());
 	st->stage_root = arcsync_aprintf("%s/stage", st->work_root);
 	arcsync_rm_rf(st->work_root);
@@ -53,6 +69,9 @@ arcsync_copy_assets(const arcsync_catalog_t *cat, const arcsync_stage_t *st,
 			return 4;
 		snprintf(parent, sizeof(parent), "%s", dest);
 		slash = strrchr(parent, '/');
+#ifdef _WIN32
+		if (!slash) slash = strrchr(parent, '\\');
+#endif
 		if (slash) {
 			*slash = '\0';
 			if (arcsync_mkdir_p(parent) != 0)
@@ -60,6 +79,17 @@ arcsync_copy_assets(const arcsync_catalog_t *cat, const arcsync_stage_t *st,
 		}
 		if (opts->verbose)
 			fprintf(stderr, "arcsync: copy %s → %s\n", a->src_path, a->dest_rel);
+#ifdef _WIN32
+		{
+			DWORD flags = opts->force ? 0 : COPY_FILE_FAIL_IF_EXISTS;
+			if (!CopyFileA(a->src_path, dest, opts->force ? FALSE : TRUE)) {
+				fprintf(stderr, "arcsync: copy failed %s (err %lu)\n",
+				    a->src_path, (unsigned long)GetLastError());
+				return 4;
+			}
+			(void)flags;
+		}
+#else
 		if (copyfile(a->src_path, dest, NULL, COPYFILE_DATA | COPYFILE_EXCL) != 0) {
 			if (errno == EEXIST && opts->force) {
 				unlink(dest);
@@ -75,6 +105,7 @@ arcsync_copy_assets(const arcsync_catalog_t *cat, const arcsync_stage_t *st,
 			}
 		}
 		chmod(dest, 0644);
+#endif
 		if (!opts->quiet && !opts->verbose && (i + 1) % 50 == 0)
 			fprintf(stderr, "arcsync: copying  %zu/%zu\n", i + 1, cat->n_assets);
 	}

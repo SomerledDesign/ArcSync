@@ -1,7 +1,11 @@
 #include "arcsync.h"
 
 #include <errno.h>
+#ifndef _WIN32
 #include <ftw.h>
+#else
+#include <windows.h>
+#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -235,7 +239,31 @@ arcsync_rm_rf(const char *path)
 {
 	if (!path || !*path)
 		return;
-	nftw(path, rm_cb, 16, FTW_DEPTH | FTW_PHYS);
+#ifdef _WIN32
+	{
+		char pattern[4096];
+		WIN32_FIND_DATAA fd;
+		HANDLE h;
+		snprintf(pattern, sizeof(pattern), "%s\\*", path);
+		h = FindFirstFileA(pattern, &fd);
+		if (h != INVALID_HANDLE_VALUE) {
+			do {
+				char child[4096];
+				if (fd.cFileName[0]=='.' && (fd.cFileName[1]==0 || (fd.cFileName[1]=='.'&&fd.cFileName[2]==0)))
+					continue;
+				snprintf(child, sizeof(child), "%s\\%s", path, fd.cFileName);
+				if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+					arcsync_rm_rf(child);
+				else
+					DeleteFileA(child);
+			} while (FindNextFileA(h, &fd));
+			FindClose(h);
+		}
+		RemoveDirectoryA(path);
+	}
+#else
+	nftw(path, rm_cb, 64, FTW_DEPTH | FTW_PHYS);
+#endif
 }
 
 void

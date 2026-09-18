@@ -1,15 +1,29 @@
 #include "arcsync.h"
 
 #include <math.h>
+#ifndef _WIN32
 #include <poll.h>
+#endif
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #include <termios.h>
+#else
+#include <windows.h>
+#include <io.h>
+#endif
 #include <time.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <process.h>
+#define isatty _isatty
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#endif
 
 #define STAR_N 96
 #define MAX_FACE 3072
@@ -53,6 +67,7 @@ star_reset(star_t *st, unsigned *rng, int near)
 	             : (0.6f + (xrnd(rng) % 280) / 100.0f);
 }
 
+#ifndef _WIN32
 static void
 term_raw(struct termios *old)
 {
@@ -71,6 +86,10 @@ term_restore(const struct termios *old)
 {
 	tcsetattr(STDIN_FILENO, TCSANOW, old);
 }
+#else
+static void term_raw(void *old) { (void)old; }
+static void term_restore(void *old) { (void)old; }
+#endif
 
 static int
 add_vert(vec3 *v, int *nv, float x, float y, float z)
@@ -458,8 +477,14 @@ arcsync_demo(void)
 	face_t *faces = NULL;
 	int nv = 0, nf = 0;
 	unsigned rng = (unsigned)time(NULL) ^ (unsigned)getpid();
+#ifndef _WIN32
 	struct termios old;
 	struct winsize ws;
+#else
+	void *old = 0;
+	HANDLE hOut;
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+#endif
 	int cols = 80, rows = 24, rows2;
 	int i, frame;
 	float tip = 0.0f, yaw = 0.0f; /* tip=pitch (X), yaw=heading (Y) */
@@ -479,10 +504,24 @@ arcsync_demo(void)
 	build_win32(verts, &nv, faces, &nf);
 	mesh_center_and_fit(verts, nv);
 
+#ifndef _WIN32
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 40 && ws.ws_row > 12) {
 		cols = ws.ws_col;
 		rows = ws.ws_row;
 	}
+#else
+	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hOut != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(hOut, &csbi)) {
+		cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+		rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+		if (cols < 40) cols = 80;
+		if (rows < 12) rows = 24;
+	}
+	{ DWORD mode = 0;
+	  if (GetConsoleMode(hOut, &mode))
+		SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+	}
+#endif
 	if (cols > FB_W) cols = FB_W;
 	if (rows > FB_H / 2) rows = FB_H / 2;
 	rows2 = rows * 2;
@@ -496,15 +535,18 @@ arcsync_demo(void)
 	signal(SIGINT, on_sig);
 	signal(SIGTERM, on_sig);
 	memset(&old, 0, sizeof(old));
+#ifndef _WIN32
 	if (have_tty && isatty(STDIN_FILENO))
 		term_raw(&old);
+#else
+	(void)old;
+#endif
 	if (have_tty) {
 		fputs("\033[?25l\033[2J", stdout);
 		fflush(stdout);
 	}
 
 	for (frame = 0; !g_stop && frame < 90 * 20; frame++) {
-		struct pollfd pfd;
 		int f;
 
 		for (i = 0; i < STAR_N; i++) {
@@ -587,15 +629,26 @@ arcsync_demo(void)
 		}
 		fflush(stdout);
 
-		pfd.fd = STDIN_FILENO;
-		pfd.events = POLLIN;
-		if (poll(&pfd, 1, 0) > 0) {
-			char ch = 0;
-			if (read(STDIN_FILENO, &ch, 1) == 1 &&
-			    (ch == 'q' || ch == 'Q' || ch == 27 || ch == 3))
-				g_stop = 1;
+#ifndef _WIN32
+		{
+			struct pollfd pfd;
+			pfd.fd = STDIN_FILENO;
+			pfd.events = POLLIN;
+			if (poll(&pfd, 1, 0) > 0) {
+				char ch = 0;
+				if (read(STDIN_FILENO, &ch, 1) == 1 &&
+				    (ch == 'q' || ch == 'Q' || ch == 27 || ch == 3))
+					g_stop = 1;
+			}
 		}
 		usleep(45000);
+#else
+		if (GetAsyncKeyState('Q') & 0x8000)
+			g_stop = 1;
+		if (GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+			g_stop = 1;
+		Sleep(45);
+#endif
 	}
 
 	free(fb);
@@ -607,8 +660,10 @@ arcsync_demo(void)
 		printf("\033[?25h\033[0m\n");
 		fflush(stdout);
 	}
+#ifndef _WIN32
 	if (isatty(STDIN_FILENO))
 		term_restore(&old);
+#endif
 	arcsync_banner();
 	return 0;
 }

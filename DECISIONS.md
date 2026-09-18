@@ -13,3 +13,5 @@ Recorded 2026-09-17 with Kevin:
 FDA: local-tools session may lack Full Disk Access for Photos.sqlite. Grant FDA to Terminal/Cursor before Photos mode.
 
 | Easter egg | — | `arcsync 1998` (also `--demo`): 3D tumbling wireframe Win32 in starfield; not in --help |
+
+| Windows x86_64 | PRD: no Windows tool | **In progress** — MinGW; in-tree ISO 9660+Joliet; --dir primary; --burn stub; thumbs placeholder; size may exceed 233 KiB |

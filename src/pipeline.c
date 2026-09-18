@@ -221,7 +221,11 @@ arcsync_run_pipeline(arcsync_opts_t *opts)
 			snprintf(deflib, sizeof(deflib),
 			    "%s/Pictures/Photos Library.photoslibrary", home ? home : "");
 			if (access(deflib, R_OK) != 0) {
+				#ifdef _WIN32
+				fprintf(stderr, "arcsync: on Windows pass --dir PATH (Photos libraries are macOS-only)\n");
+#else
 				fprintf(stderr, "arcsync: no default Photos library; pass --library or --dir\n");
+#endif
 				return 2;
 			}
 			source = deflib;
