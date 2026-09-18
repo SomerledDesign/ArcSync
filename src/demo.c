@@ -324,16 +324,71 @@ rot_normal(float *nx, float *ny, float *nz, float ax, float ay, float az)
 	*nz = out.z;
 }
 
+/* Set once after mesh build: camera distance + fit so rest-pose width ≈ 60% screen. */
+static float g_cam = 8.0f;
+static float g_half_w = 1.0f;
+static float g_half_h = 1.0f;
+
+static void
+mesh_center_and_fit(vec3 *verts, int nv)
+{
+	int i;
+	float minx, maxx, miny, maxy, minz, maxz;
+	float cx, cy, cz;
+	if (nv <= 0)
+		return;
+	minx = maxx = verts[0].x;
+	miny = maxy = verts[0].y;
+	minz = maxz = verts[0].z;
+	for (i = 1; i < nv; i++) {
+		if (verts[i].x < minx) minx = verts[i].x;
+		if (verts[i].x > maxx) maxx = verts[i].x;
+		if (verts[i].y < miny) miny = verts[i].y;
+		if (verts[i].y > maxy) maxy = verts[i].y;
+		if (verts[i].z < minz) minz = verts[i].z;
+		if (verts[i].z > maxz) maxz = verts[i].z;
+	}
+	cx = 0.5f * (minx + maxx);
+	cy = 0.5f * (miny + maxy);
+	cz = 0.5f * (minz + maxz);
+	for (i = 0; i < nv; i++) {
+		verts[i].x -= cx;
+		verts[i].y -= cy;
+		verts[i].z -= cz;
+	}
+	g_half_w = 0.5f * (maxx - minx);
+	g_half_h = 0.5f * (maxy - miny);
+	if (g_half_w < 0.05f) g_half_w = 0.05f;
+	if (g_half_h < 0.05f) g_half_h = 0.05f;
+	/* Pull back so the word sits in frame with mild perspective (not in your face). */
+	{
+		float extent = g_half_w > g_half_h ? g_half_w : g_half_h;
+		g_cam = extent * 4.2f + (maxz - minz) * 1.5f;
+		if (g_cam < 6.0f) g_cam = 6.0f;
+	}
+}
+
 static int
 project(const vec3 *v, int cols, int rows, int *sx, int *sy, float *depth)
 {
-	float z = v->z + 5.2f;
-	float f;
-	if (z < 0.4f)
+	float z = v->z + g_cam;
+	float px, py;
+	if (z < 0.5f)
 		return 0;
-	f = 26.0f / z;
-	*sx = cols / 2 + (int)(v->x * f * (cols * 0.042f));
-	*sy = rows / 2 - (int)(v->y * f * (rows * 0.095f));
+	/*
+	 * Rest pose (v.z≈0): full mesh width 2*g_half_w maps to 60% of cols,
+	 * height 2*g_half_h maps to 60% of rows — pick the tighter fit so the
+	 * whole word stays inside ~60% of the screen and stays centered.
+	 */
+	{
+		float kx = (0.60f * (float)cols) / (2.0f * g_half_w);
+		float ky = (0.60f * (float)rows) / (2.0f * g_half_h);
+		float k = kx < ky ? kx : ky;
+		px = v->x * k * (g_cam / z);
+		py = v->y * k * (g_cam / z);
+	}
+	*sx = cols / 2 + (int)(px + (px >= 0 ? 0.5f : -0.5f));
+	*sy = rows / 2 - (int)(py + (py >= 0 ? 0.5f : -0.5f));
 	*depth = z;
 	return 1;
 }
@@ -462,7 +517,7 @@ arcsync_demo(void)
 	struct winsize ws;
 	int cols = 80, rows = 24;
 	int i, frame;
-	float ax = 0.35f, ay = 0.15f, az = 0.0f;
+	float ax = 0.18f, ay = 0.08f, az = 0.0f;
 	int have_tty = isatty(STDOUT_FILENO);
 	unsigned char *fb = NULL;
 	float *zb = NULL;
@@ -473,6 +528,7 @@ arcsync_demo(void)
 	rverts = arcsync_xmalloc((size_t)MAX_VERT * sizeof(vec3));
 	faces = arcsync_xmalloc((size_t)MAX_FACE * sizeof(face_t));
 	build_win32(verts, &nv, faces, &nf);
+	mesh_center_and_fit(verts, nv);
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 40 && ws.ws_row > 12) {
 		cols = ws.ws_col;
