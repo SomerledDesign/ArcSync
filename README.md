@@ -4,6 +4,15 @@ Archive a photo library (or a plain folder) to a hybrid CD/DVD/Blu-ray ISO with 
 
 > Win32 asm photo-CD tools, 1998; this is that program after the API grew up.
 
+## Install (Homebrew)
+
+```sh
+brew install SomerledDesign/tap/arcsync
+# or:
+brew tap SomerledDesign/tap
+brew install arcsync
+```
+
 ## Quick start
 
 ```sh
