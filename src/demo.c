@@ -251,33 +251,36 @@ xform_poly(vec2 *out, const vec2 *in, int n, float ox, float oy, float sx, float
 static void
 build_win32(vec3 *verts, int *nv, face_t *faces, int *nf)
 {
-	float z0 = -0.18f, z1 = 0.18f;
-	float cell_w = 1.05f, gap = 0.18f;
+	float z0 = -0.22f, z1 = 0.22f;
+	float cell_w = 1.05f, gap = 0.14f;
 	float total = 5.0f * cell_w + 4.0f * gap;
 	float ox = -0.5f * total;
 	float oy = -0.5f;
 	float sx = cell_w, sy = 1.0f;
 	vec2 tmp[MAX_POLY];
 
-	/* W — chevron solid */
+	*nv = 0;
+	*nf = 0;
+
+	/* Block W */
 	{
 		static const vec2 W[] = {
-			{0.02f, 0.98f}, {0.16f, 0.98f}, {0.30f, 0.38f}, {0.42f, 0.72f},
-			{0.50f, 0.72f}, {0.58f, 0.72f}, {0.70f, 0.38f}, {0.84f, 0.98f},
-			{0.98f, 0.98f}, {0.78f, 0.02f}, {0.62f, 0.02f}, {0.50f, 0.42f},
-			{0.38f, 0.02f}, {0.22f, 0.02f}
+			{0.00f, 1.00f}, {0.18f, 1.00f}, {0.32f, 0.42f}, {0.42f, 0.72f},
+			{0.58f, 0.72f}, {0.68f, 0.42f}, {0.82f, 1.00f}, {1.00f, 1.00f},
+			{0.78f, 0.00f}, {0.60f, 0.00f}, {0.50f, 0.38f}, {0.40f, 0.00f},
+			{0.22f, 0.00f}
 		};
 		xform_poly(tmp, W, (int)(sizeof(W) / sizeof(W[0])), ox, oy, sx, sy);
 		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(W) / sizeof(W[0])), z0, z1);
 		ox += cell_w + gap;
 	}
-	/* i — stem */
+	/* Block i */
 	{
 		static const vec2 stem[] = {
-			{0.38f, 0.02f}, {0.62f, 0.02f}, {0.62f, 0.58f}, {0.38f, 0.58f}
+			{0.34f, 0.00f}, {0.66f, 0.00f}, {0.66f, 0.62f}, {0.34f, 0.62f}
 		};
 		static const vec2 dot[] = {
-			{0.36f, 0.72f}, {0.64f, 0.72f}, {0.64f, 0.98f}, {0.36f, 0.98f}
+			{0.34f, 0.74f}, {0.66f, 0.74f}, {0.66f, 1.00f}, {0.34f, 1.00f}
 		};
 		xform_poly(tmp, stem, 4, ox, oy, sx, sy);
 		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
@@ -285,40 +288,36 @@ build_win32(vec3 *verts, int *nv, face_t *faces, int *nf)
 		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
 		ox += cell_w + gap;
 	}
-	/* n — left stem, arch, right stem as one outline */
+	/* Block n */
 	{
 		static const vec2 n[] = {
-			{0.10f, 0.02f}, {0.30f, 0.02f}, {0.30f, 0.55f},
-			{0.38f, 0.72f}, {0.50f, 0.78f}, {0.62f, 0.72f},
-			{0.70f, 0.55f}, {0.70f, 0.02f}, {0.90f, 0.02f},
-			{0.90f, 0.62f}, {0.78f, 0.88f}, {0.50f, 0.98f},
-			{0.22f, 0.88f}, {0.10f, 0.62f}
+			{0.08f, 0.00f}, {0.32f, 0.00f}, {0.32f, 0.58f},
+			{0.40f, 0.72f}, {0.60f, 0.72f}, {0.68f, 0.58f},
+			{0.68f, 0.00f}, {0.92f, 0.00f}, {0.92f, 0.78f},
+			{0.80f, 0.92f}, {0.20f, 0.92f}, {0.08f, 0.78f}
 		};
 		xform_poly(tmp, n, (int)(sizeof(n) / sizeof(n[0])), ox, oy, sx, sy);
 		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(n) / sizeof(n[0])), z0, z1);
 		ox += cell_w + gap;
 	}
-	/* 3 */
+	/* Block 3 — orthogonal steps */
 	{
 		static const vec2 three[] = {
-			{0.12f, 0.98f}, {0.78f, 0.98f}, {0.92f, 0.88f}, {0.92f, 0.62f},
-			{0.80f, 0.52f}, {0.92f, 0.42f}, {0.92f, 0.14f}, {0.78f, 0.02f},
-			{0.12f, 0.02f}, {0.12f, 0.18f}, {0.68f, 0.18f}, {0.76f, 0.26f},
-			{0.76f, 0.38f}, {0.60f, 0.46f}, {0.32f, 0.46f}, {0.32f, 0.58f},
-			{0.60f, 0.58f}, {0.76f, 0.66f}, {0.76f, 0.80f}, {0.68f, 0.86f},
-			{0.12f, 0.86f}
+			{0.08f, 1.00f}, {0.92f, 1.00f}, {0.92f, 0.80f}, {0.32f, 0.80f},
+			{0.32f, 0.58f}, {0.80f, 0.58f}, {0.92f, 0.46f}, {0.92f, 0.00f},
+			{0.08f, 0.00f}, {0.08f, 0.20f}, {0.70f, 0.20f}, {0.70f, 0.38f},
+			{0.20f, 0.38f}, {0.08f, 0.50f}
 		};
 		xform_poly(tmp, three, (int)(sizeof(three) / sizeof(three[0])), ox, oy, sx, sy);
 		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(three) / sizeof(three[0])), z0, z1);
 		ox += cell_w + gap;
 	}
-	/* 2 */
+	/* Block 2 — orthogonal steps */
 	{
 		static const vec2 two[] = {
-			{0.10f, 0.98f}, {0.78f, 0.98f}, {0.92f, 0.86f}, {0.92f, 0.58f},
-			{0.70f, 0.42f}, {0.28f, 0.22f}, {0.28f, 0.18f}, {0.90f, 0.18f},
-			{0.90f, 0.02f}, {0.10f, 0.02f}, {0.10f, 0.34f}, {0.55f, 0.56f},
-			{0.74f, 0.66f}, {0.74f, 0.80f}, {0.62f, 0.86f}, {0.10f, 0.86f}
+			{0.08f, 1.00f}, {0.92f, 1.00f}, {0.92f, 0.78f}, {0.32f, 0.40f},
+			{0.32f, 0.20f}, {0.92f, 0.20f}, {0.92f, 0.00f}, {0.08f, 0.00f},
+			{0.08f, 0.38f}, {0.68f, 0.70f}, {0.68f, 0.80f}, {0.08f, 0.80f}
 		};
 		xform_poly(tmp, two, (int)(sizeof(two) / sizeof(two[0])), ox, oy, sx, sy);
 		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(two) / sizeof(two[0])), z0, z1);
@@ -406,8 +405,8 @@ project(const vec3 *v, int cols, int rows2, int *sx, int *sy, float *depth)
 	if (z < 0.5f)
 		return 0;
 	{
-		float kx = (0.60f * (float)cols) / (2.0f * g_half_w);
-		float ky = (0.60f * (float)rows2) / (2.0f * g_half_h);
+		float kx = (0.72f * (float)cols) / (2.0f * g_half_w);
+		float ky = (0.72f * (float)rows2) / (2.0f * g_half_h);
 		float k = kx < ky ? kx : ky;
 		px = v->x * k * (g_cam / z);
 		py = v->y * k * (g_cam / z);
@@ -562,7 +561,12 @@ arcsync_demo(void)
 	struct winsize ws;
 	int cols = 80, rows = 24, rows2;
 	int i, frame;
-	float ax = 0.18f, ay = 0.08f, az = 0.0f;
+	float tip = 0.0f, yaw = 0.0f; /* tip=pitch (X), yaw=heading (Y) */
+	float tip_phase = 0.0f, yaw_phase = 0.0f;
+	const float tip_amp = 25.0f * (float)M_PI / 180.0f;   /* ±25° */
+	const float yaw_amp = 120.0f * (float)M_PI / 180.0f;  /* ±120° */
+	const float tip_speed = 0.035f;
+	const float yaw_speed = 0.022f;
 	int have_tty = isatty(STDOUT_FILENO);
 	unsigned char *fb = NULL;
 	float *zb = NULL;
@@ -607,9 +611,10 @@ arcsync_demo(void)
 			if (stars[i].z < 0.08f)
 				star_reset(&stars[i], &rng, 1);
 		}
-		ax += 0.0165f;
-		ay += 0.02475f;
-		az += 0.0105f;
+		tip_phase += tip_speed;
+		yaw_phase += yaw_speed;
+		tip = tip_amp * sinf(tip_phase);
+		yaw = yaw_amp * sinf(yaw_phase);
 
 		memset(fb, 0, (size_t)cols * (size_t)rows2);
 		for (i = 0; i < cols * rows2; i++)
@@ -628,7 +633,7 @@ arcsync_demo(void)
 		}
 
 		for (i = 0; i < nv; i++)
-			rot_vec(&rverts[i], &verts[i], ax, ay, az);
+			rot_vec(&rverts[i], &verts[i], tip, yaw, 0.0f);
 
 		for (f = 0; f < nf; f++) {
 			float nx = faces[f].nx, ny = faces[f].ny, nz = faces[f].nz;
@@ -637,7 +642,7 @@ arcsync_demo(void)
 			float z0, z1, z2;
 			unsigned char shade;
 
-			rot_normal(&nx, &ny, &nz, ax, ay, az);
+			rot_normal(&nx, &ny, &nz, tip, yaw, 0.0f);
 			if (nz < 0.05f)
 				continue;
 			ndot = nx * Lx + ny * Ly + nz * Lz;
@@ -661,7 +666,7 @@ arcsync_demo(void)
 			int c;
 			if (i == rows - 1) {
 				const char *msg =
-				    " 1998 · arcsync — vector Win32 · q/esc ";
+				    " 1998 · arcsync — block Win32 · q/esc ";
 				int len = (int)strlen(msg);
 				int off = (frame / 2) % (len + cols);
 				fputs("\033[36m", stdout);
