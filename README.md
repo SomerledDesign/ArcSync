@@ -38,11 +38,11 @@ make && make test && make check-size
 # Plain folder of photos
 ./arcsync --dir ~/Pictures/vacation --media dvd --split --out ~/Desktop/vac.iso
 
-# See what is actually on this Mac before touching Photos settings
-./arcsync -n --cloud fail
+# See what is actually on this Mac (default --cloud fail)
+./arcsync -n
 
 # After Download Originals has landed overnight
-./arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso
+./arcsync --media dvd --split --out ~/Desktop/family.iso
 
 # NAS / RAID masters (skip Photos)
 ./arcsync --dir /Volumes/NAS/Masters --media none --out ~/Desktop/masters.iso
@@ -92,20 +92,20 @@ ArcSync copies files that are **already on this Mac**. It does not download from
 
 | Mode | Behavior |
 |---|---|
-| `skip` (default) | Local originals only; list the rest in `missing.txt` |
+| `fail` (**default**) | Any selected non-original → exit **8**, nothing staged — safe for the one-liner |
+| `skip` | Local originals only; list the rest in `missing.txt` (knowingly incomplete) |
 | `derivative` | Fall back to local previews; tag `quality=derivative` — slideshow, not archive |
-| `fail` | Any selected non-original → exit **8**, nothing staged |
 
 ### Overnight pull, morning burn (family / Optimize Mac Storage)
 
-1. Dry-run to see the gap: `arcsync -n --cloud fail`  
+1. Dry-run to see the gap: `arcsync -n` (default `--cloud fail`)  
 2. Photos → Settings → iCloud → **Download Originals to this Mac**  
 3. Leave the Mac awake on power overnight  
 4. Morning dry-run again until cloud-only is as close to zero as Photos allows  
-5. Burn: `arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso`  
+5. Burn: `arcsync --media dvd --split --out ~/Desktop/family.iso`  
 6. Spot-check the mounted disc (`index.html` + a few full images), then you may switch Photos back to Optimize  
 
-`--cloud fail` is the family-photographer flag: refuse a quiet partial archive.
+Default `--cloud fail` is deliberate: a bare `arcsync --out …` will not silently omit iCloud originals.
 
 ### Working photographers (NAS / folder)
 

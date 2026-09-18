@@ -31,7 +31,7 @@ arcsync_opts_init(arcsync_opts_t *opts)
 {
 	memset(opts, 0, sizeof(*opts));
 	opts->media = ARCSYNC_MEDIA_DVD;
-	opts->cloud = ARCSYNC_CLOUD_SKIP;
+	opts->cloud = ARCSYNC_CLOUD_FAIL;
 	opts->thumb_size = 240;
 	opts->prefer_edited = 0;
 }
@@ -84,7 +84,7 @@ arcsync_print_help(void)
 "  --thumb-size PX    thumbnail long edge (default 240)\n"
 "  --title TEXT       gallery title\n"
 "  --edited           copy edited derivatives when present\n"
-"  --cloud MODE       skip | derivative | fail   (default skip)\n"
+"  --cloud MODE       fail | skip | derivative   (default fail)\n"
 "  --include-hidden\n"
 "  --include-trashed\n"
 "  -n, --dry-run\n"

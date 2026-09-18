@@ -123,6 +123,7 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_cat
 	int rc;
 	char sql[1024];
 	size_t missing_selected = 0;
+	size_t local_selected = 0;
 
 	if (!tmp || !*tmp)
 		tmp = "/tmp";
@@ -239,15 +240,28 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_cat
 			cat->n_videos++;
 		alb = arcsync_catalog_find_or_add_album(cat, "Library", "library", NULL);
 		arcsync_album_add_asset(alb, cat->n_assets - 1);
+		local_selected++;
 	}
 	sqlite3_finalize(st);
 	sqlite3_close(db);
 	arcsync_rm_rf(tmpdir);
 
 	if (opts->cloud == ARCSYNC_CLOUD_FAIL && missing_selected > 0) {
-		fprintf(stderr, "arcsync: --cloud fail: %zu assets not local originals. "
-		    "Photos → Settings → iCloud → Download Originals, then retry.\n",
-		    missing_selected);
+		fprintf(stderr,
+		    "arcsync: refusing to write an ISO (cloud mode is fail — the safe default).\n"
+		    "  %zu photo/video originals are on this Mac\n"
+		    "  %zu are not on this Mac (iCloud / Optimize Mac Storage)\n"
+		    "\n"
+		    "A disc of only the local set would silently omit family pictures still\n"
+		    "in the cloud. Download them first:\n"
+		    "  Photos → Settings → iCloud → Download Originals to this Mac\n"
+		    "Leave the Mac awake on power overnight, then check:\n"
+		    "  arcsync -n\n"
+		    "When that dry-run exits 0, run your archive command again.\n"
+		    "\n"
+		    "To knowingly archive only what is already local:\n"
+		    "  arcsync --cloud skip ...\n",
+		    local_selected, missing_selected);
 		return 8;
 	}
 	if (!opts->quiet && cat->n_missing > 0)

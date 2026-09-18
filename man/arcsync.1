@@ -90,11 +90,13 @@ Disc volume label. Default
 Inclusive capture-date filter (local civil date).
 .It Fl -cloud Ar mode
 What to do when a Photos original is not on disk:
+.Ar fail
+(default — refuse to write an ISO if anything selected is still only in iCloud),
 .Ar skip
-(default),
-.Ar derivative ,
+(copy only local originals; knowingly incomplete),
 or
-.Ar fail .
+.Ar derivative
+(fill holes with local previews; not an archive).
 See
 .Sx ICLOUD AND OPTIMIZED LIBRARIES .
 .It Fl -edited
@@ -147,9 +149,11 @@ Overnight pull, morning burn:
 Confirm free space. You need enough room for every original plus a little extra.
 In Photos, open a photo and use Get Info if you need a feel for size, or run:
 .Pp
-.Dl arcsync -n --cloud fail
+.Dl arcsync -n
 .Pp
-The dry-run lists how many files are local originals and how many are not on
+The dry-run (with default
+.Fl -cloud fail )
+lists how many files are local originals and how many are not on
 this Mac. If the missing/cloud-only count is large, free disk before the next
 step.
 .It
@@ -163,20 +167,22 @@ progress or a quiet Photos window is normal.
 .It
 In the morning, run the dry-run again:
 .Pp
-.Dl arcsync -n --cloud fail
+.Dl arcsync -n
 .Pp
 You want missing/cloud-only as close to zero as it will go. Shared Albums and
 some screenshots may never land as originals; that is Photos, not
 .Nm .
 When fail would succeed (exit 0 on dry-run), burn:
 .Pp
-.Dl arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso
+.Dl arcsync --media dvd --split --out ~/Desktop/family.iso
 .Pp
 .Fl -cloud fail
-is the family-photographer flag: if anything selected is still only in the
-cloud,
+is the default for exactly this reason: if anything selected is still only in
+the cloud,
 .Nm
-refuses to write an ISO rather than quietly omit pictures.
+refuses to write an ISO rather than quietly omit pictures. A one-line
+.Nm
+with no flags will not silently burn an Optimize-Mac-Storage library.
 .It
 After the ISO is mounted and spot-checked, you may switch Photos back to
 Optimize Mac Storage if you need the disk space. The disc is the archive;
@@ -196,8 +202,8 @@ workflow: the files were next to the machine because there was no cloud to hide
 them in.
 .Ss Fl -cloud skip and Fl -cloud derivative
 .Fl -cloud skip
-(default) copies only local originals and skips anything still in iCloud.
-Useful for a test burn.
+copies only local originals and skips anything still in iCloud.
+Useful for a deliberate test burn of whatever happens to be local.
 .Fl -cloud derivative
 is intended to fill holes with local previews and mark those rows
 .Li quality=derivative
@@ -236,8 +242,9 @@ failed.
 .It 7
 Interrupted (SIGINT/SIGTERM).
 .It 8
-.Fl -cloud fail
-and at least one selected asset is not a local original.
+Cloud mode
+.Ar fail
+(the default) and at least one selected asset is not a local original.
 .El
 .Sh FILES
 .Bl -tag -width Ds
@@ -288,7 +295,7 @@ See what is actually on this Mac before touching Photos settings:
 .Pp
 After originals have landed overnight:
 .Pp
-.Dl arcsync --cloud fail --media dvd --split --out ~/Desktop/family.iso
+.Dl arcsync --media dvd --split --out ~/Desktop/family.iso
 .Pp
 Professional tree already on a NAS:
 .Pp

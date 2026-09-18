@@ -13,3 +13,5 @@ Recorded 2026-09-17 with Kevin:
 FDA: local-tools session may lack Full Disk Access for Photos.sqlite. Grant FDA to Terminal/Cursor before Photos mode.
 
 | Windows x86_64 | PRD: no Windows tool | **Paused** until a Windows box — MinGW scaffolding + in-tree ISO 9660+Joliet landed; --dir primary; --burn stub |
+
+| `--cloud` default | PRD: skip | **fail** — bare one-liner must not silently omit iCloud originals; use `--cloud skip` only when incomplete is intentional |
