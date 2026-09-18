@@ -12,10 +12,11 @@
 #include <unistd.h>
 
 #define STAR_N 96
-#define MAX_FACE 4096
-#define MAX_VERT 12288
+#define MAX_FACE 3072
+#define MAX_VERT 8192
 #define FB_W 200
-#define FB_H 80
+#define FB_H 120
+#define MAX_POLY 64
 
 static volatile sig_atomic_t g_stop;
 
@@ -27,11 +28,16 @@ on_sig(int sig)
 }
 
 typedef struct { float x, y, z; } vec3;
+typedef struct { float x, y; } vec2;
 typedef struct {
-	int i0, i1, i2, i3; /* quad */
+	int i0, i1, i2; /* triangle */
 	float nx, ny, nz;
 } face_t;
 typedef struct { float x, y, z; } star_t;
+
+static float g_cam = 8.0f;
+static float g_half_w = 1.0f;
+static float g_half_h = 1.0f;
 
 static unsigned
 xrnd(unsigned *s)
@@ -82,21 +88,21 @@ add_vert(vec3 *v, int *nv, float x, float y, float z)
 }
 
 static void
-face_normal(face_t *f, const vec3 *v)
+tri_normal(face_t *f, const vec3 *v)
 {
 	vec3 a, b;
 	float lx, ly, lz, inv;
 	a.x = v[f->i1].x - v[f->i0].x;
 	a.y = v[f->i1].y - v[f->i0].y;
 	a.z = v[f->i1].z - v[f->i0].z;
-	b.x = v[f->i3].x - v[f->i0].x;
-	b.y = v[f->i3].y - v[f->i0].y;
-	b.z = v[f->i3].z - v[f->i0].z;
+	b.x = v[f->i2].x - v[f->i0].x;
+	b.y = v[f->i2].y - v[f->i0].y;
+	b.z = v[f->i2].z - v[f->i0].z;
 	lx = a.y * b.z - a.z * b.y;
 	ly = a.z * b.x - a.x * b.z;
 	lz = a.x * b.y - a.y * b.x;
 	inv = sqrtf(lx * lx + ly * ly + lz * lz);
-	if (inv < 1e-6f) {
+	if (inv < 1e-8f) {
 		f->nx = 0;
 		f->ny = 0;
 		f->nz = 1;
@@ -109,184 +115,252 @@ face_normal(face_t *f, const vec3 *v)
 }
 
 static void
-add_quad(face_t *faces, int *nf, vec3 *verts, int *nv,
-    float x0, float y0, float z0,
-    float x1, float y1, float z1,
-    float x2, float y2, float z2,
-    float x3, float y3, float z3)
+add_tri(face_t *faces, int *nf, vec3 *verts, int i0, int i1, int i2)
 {
 	face_t *f;
-	int a, b, c, d;
-	if (*nf >= MAX_FACE)
-		return;
-	a = add_vert(verts, nv, x0, y0, z0);
-	b = add_vert(verts, nv, x1, y1, z1);
-	c = add_vert(verts, nv, x2, y2, z2);
-	d = add_vert(verts, nv, x3, y3, z3);
-	if (a < 0 || b < 0 || c < 0 || d < 0)
+	if (*nf >= MAX_FACE || i0 < 0 || i1 < 0 || i2 < 0)
 		return;
 	f = &faces[*nf];
-	f->i0 = a;
-	f->i1 = b;
-	f->i2 = c;
-	f->i3 = d;
-	face_normal(f, verts);
+	f->i0 = i0;
+	f->i1 = i1;
+	f->i2 = i2;
+	tri_normal(f, verts);
 	(*nf)++;
 }
 
-/* Axis-aligned box centered at (cx,cy,cz) with half-sizes hx,hy,hz. */
-static void
-add_box(face_t *faces, int *nf, vec3 *verts, int *nv,
-    float cx, float cy, float cz, float hx, float hy, float hz)
+static float
+cross2(vec2 a, vec2 b, vec2 c)
 {
-	float x0 = cx - hx, x1 = cx + hx;
-	float y0 = cy - hy, y1 = cy + hy;
-	float z0 = cz - hz, z1 = cz + hz;
-	/* +Z (front) */
-	add_quad(faces, nf, verts, nv, x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1);
-	/* -Z (back) */
-	add_quad(faces, nf, verts, nv, x1, y0, z0, x0, y0, z0, x0, y1, z0, x1, y1, z0);
-	/* +Y (top) */
-	add_quad(faces, nf, verts, nv, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);
-	/* -Y (bottom) */
-	add_quad(faces, nf, verts, nv, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1);
-	/* +X */
-	add_quad(faces, nf, verts, nv, x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1);
-	/* -X */
-	add_quad(faces, nf, verts, nv, x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0);
+	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-/*
- * 11x15 block glyphs — denser voxels so shaded faces still read as letters.
- * Rows top→bottom; columns left→right. '#' = solid cube.
- */
-#define GLYPH_W 11
-#define GLYPH_H 15
-
-static const char *GLYPH_W_ROWS[GLYPH_H] = {
-	"#         #",
-	"#         #",
-	"#         #",
-	"#         #",
-	"#    #    #",
-	"#    #    #",
-	"#   # #   #",
-	"#   # #   #",
-	"#  #   #  #",
-	"#  #   #  #",
-	"# #     # #",
-	"##       ##",
-	"#         #",
-	"#         #",
-	"#         #",
-};
-static const char *GLYPH_I_ROWS[GLYPH_H] = {
-	"  #######  ",
-	"  #######  ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"    ###    ",
-	"  #######  ",
-	"  #######  ",
-};
-static const char *GLYPH_N_ROWS[GLYPH_H] = {
-	"#         #",
-	"##        #",
-	"##        #",
-	"# #       #",
-	"# #       #",
-	"#  #      #",
-	"#  #      #",
-	"#   #     #",
-	"#   #     #",
-	"#    #    #",
-	"#    #    #",
-	"#     #   #",
-	"#      #  #",
-	"#       # #",
-	"#        ##",
-};
-static const char *GLYPH_3_ROWS[GLYPH_H] = {
-	" ######### ",
-	"###########",
-	"##       ##",
-	"         ##",
-	"         ##",
-	"        ## ",
-	"   ####### ",
-	"   ####### ",
-	"        ## ",
-	"         ##",
-	"         ##",
-	"##       ##",
-	"##       ##",
-	"###########",
-	" ######### ",
-};
-static const char *GLYPH_2_ROWS[GLYPH_H] = {
-	" ######### ",
-	"###########",
-	"##       ##",
-	"         ##",
-	"         ##",
-	"        ## ",
-	"       ##  ",
-	"      ##   ",
-	"     ##    ",
-	"    ##     ",
-	"   ##      ",
-	"  ##       ",
-	" ##      ##",
-	"###########",
-	"###########",
-};
-
-static void
-add_glyph(face_t *faces, int *nf, vec3 *verts, int *nv,
-    const char *rows[], float ox, float cell, float depth)
+static int
+point_in_tri(vec2 p, vec2 a, vec2 b, vec2 c)
 {
-	int r, c;
-	float half = cell * 0.48f;
-	float hz = depth * 0.5f;
-	float y_top = (GLYPH_H - 1) * 0.5f * cell;
-	for (r = 0; r < GLYPH_H; r++) {
-		for (c = 0; c < GLYPH_W; c++) {
-			if (rows[r][c] != '#')
+	float c1 = cross2(a, b, p);
+	float c2 = cross2(b, c, p);
+	float c3 = cross2(c, a, p);
+	return (c1 >= 0 && c2 >= 0 && c3 >= 0) || (c1 <= 0 && c2 <= 0 && c3 <= 0);
+}
+
+/* Ear-clip a simple CCW polygon into tris; idx[] maps poly verts → mesh verts. */
+static void
+ear_clip_face(face_t *faces, int *nf, vec3 *verts,
+    const vec2 *poly, const int *idx, int n, int reverse)
+{
+	int V[MAX_POLY];
+	int nv = n, guard;
+	int i;
+	if (n < 3)
+		return;
+	for (i = 0; i < n; i++)
+		V[i] = i;
+	guard = 0;
+	while (nv > 3 && guard < n * n) {
+		int ear = -1;
+		guard++;
+		for (i = 0; i < nv; i++) {
+			int i0 = V[(i + nv - 1) % nv];
+			int i1 = V[i];
+			int i2 = V[(i + 1) % nv];
+			vec2 a = poly[i0], b = poly[i1], c = poly[i2];
+			int j, ok;
+			if (cross2(a, b, c) <= 0.0f)
 				continue;
-			add_box(faces, nf, verts, nv,
-			    ox + (c + 0.5f) * cell,
-			    y_top - r * cell,
-			    0.0f,
-			    half, half, hz);
+			ok = 1;
+			for (j = 0; j < nv; j++) {
+				int t = V[j];
+				if (t == i0 || t == i1 || t == i2)
+					continue;
+				if (point_in_tri(poly[t], a, b, c)) {
+					ok = 0;
+					break;
+				}
+			}
+			if (ok) {
+				ear = i;
+				break;
+			}
 		}
+		if (ear < 0)
+			break;
+		{
+			int i0 = V[(ear + nv - 1) % nv];
+			int i1 = V[ear];
+			int i2 = V[(ear + 1) % nv];
+			if (reverse)
+				add_tri(faces, nf, verts, idx[i0], idx[i2], idx[i1]);
+			else
+				add_tri(faces, nf, verts, idx[i0], idx[i1], idx[i2]);
+			for (i = ear; i < nv - 1; i++)
+				V[i] = V[i + 1];
+			nv--;
+		}
+	}
+	if (nv == 3) {
+		if (reverse)
+			add_tri(faces, nf, verts, idx[V[0]], idx[V[2]], idx[V[1]]);
+		else
+			add_tri(faces, nf, verts, idx[V[0]], idx[V[1]], idx[V[2]]);
+	}
+}
+
+/* Extrude a closed 2D polygon (CCW) into a solid prism. */
+static void
+extrude_poly(face_t *faces, int *nf, vec3 *verts, int *nv,
+    const vec2 *poly, int n, float z0, float z1)
+{
+	int i;
+	int idx_f[MAX_POLY], idx_b[MAX_POLY];
+	if (n < 3 || n > MAX_POLY)
+		return;
+	for (i = 0; i < n; i++) {
+		idx_f[i] = add_vert(verts, nv, poly[i].x, poly[i].y, z1);
+		if (idx_f[i] < 0)
+			return;
+	}
+	for (i = 0; i < n; i++) {
+		idx_b[i] = add_vert(verts, nv, poly[i].x, poly[i].y, z0);
+		if (idx_b[i] < 0)
+			return;
+	}
+	ear_clip_face(faces, nf, verts, poly, idx_f, n, 0);
+	ear_clip_face(faces, nf, verts, poly, idx_b, n, 1);
+	for (i = 0; i < n; i++) {
+		int j = (i + 1) % n;
+		add_tri(faces, nf, verts, idx_f[i], idx_f[j], idx_b[j]);
+		add_tri(faces, nf, verts, idx_f[i], idx_b[j], idx_b[i]);
 	}
 }
 
 static void
+xform_poly(vec2 *out, const vec2 *in, int n, float ox, float oy, float sx, float sy)
+{
+	int i;
+	for (i = 0; i < n; i++) {
+		out[i].x = ox + in[i].x * sx;
+		out[i].y = oy + in[i].y * sy;
+	}
+}
+
+/*
+ * Vector letter contours in unit cell [0..1] x [0..1], CCW outer.
+ * Built as solid shapes (no holes) — classic demo-style block letters
+ * with smooth outlines instead of voxel cubes.
+ */
+static void
 build_win32(vec3 *verts, int *nv, face_t *faces, int *nf)
 {
-	/* Smaller cells + more pixels = smoother silhouette; slightly larger overall. */
-	float cell = 0.155f;
-	float gap = 0.20f;
-	float depth = 0.34f;
-	float w = (float)GLYPH_W * cell;
-	float x = -(2.5f * w + 2.0f * gap);
+	float z0 = -0.18f, z1 = 0.18f;
+	float cell_w = 1.05f, gap = 0.18f;
+	float total = 5.0f * cell_w + 4.0f * gap;
+	float ox = -0.5f * total;
+	float oy = -0.5f;
+	float sx = cell_w, sy = 1.0f;
+	vec2 tmp[MAX_POLY];
 
-	*nv = 0;
-	*nf = 0;
-	add_glyph(faces, nf, verts, nv, GLYPH_W_ROWS, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_I_ROWS, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_N_ROWS, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_3_ROWS, x, cell, depth); x += w + gap;
-	add_glyph(faces, nf, verts, nv, GLYPH_2_ROWS, x, cell, depth);
+	/* W — chevron solid */
+	{
+		static const vec2 W[] = {
+			{0.02f, 0.98f}, {0.16f, 0.98f}, {0.30f, 0.38f}, {0.42f, 0.72f},
+			{0.50f, 0.72f}, {0.58f, 0.72f}, {0.70f, 0.38f}, {0.84f, 0.98f},
+			{0.98f, 0.98f}, {0.78f, 0.02f}, {0.62f, 0.02f}, {0.50f, 0.42f},
+			{0.38f, 0.02f}, {0.22f, 0.02f}
+		};
+		xform_poly(tmp, W, (int)(sizeof(W) / sizeof(W[0])), ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(W) / sizeof(W[0])), z0, z1);
+		ox += cell_w + gap;
+	}
+	/* i — stem */
+	{
+		static const vec2 stem[] = {
+			{0.38f, 0.02f}, {0.62f, 0.02f}, {0.62f, 0.58f}, {0.38f, 0.58f}
+		};
+		static const vec2 dot[] = {
+			{0.36f, 0.72f}, {0.64f, 0.72f}, {0.64f, 0.98f}, {0.36f, 0.98f}
+		};
+		xform_poly(tmp, stem, 4, ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
+		xform_poly(tmp, dot, 4, ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
+		ox += cell_w + gap;
+	}
+	/* n — left stem, arch, right stem as one outline */
+	{
+		static const vec2 n[] = {
+			{0.10f, 0.02f}, {0.30f, 0.02f}, {0.30f, 0.55f},
+			{0.38f, 0.72f}, {0.50f, 0.78f}, {0.62f, 0.72f},
+			{0.70f, 0.55f}, {0.70f, 0.02f}, {0.90f, 0.02f},
+			{0.90f, 0.62f}, {0.78f, 0.88f}, {0.50f, 0.98f},
+			{0.22f, 0.88f}, {0.10f, 0.62f}
+		};
+		xform_poly(tmp, n, (int)(sizeof(n) / sizeof(n[0])), ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(n) / sizeof(n[0])), z0, z1);
+		ox += cell_w + gap;
+	}
+	/* 3 */
+	{
+		static const vec2 three[] = {
+			{0.12f, 0.98f}, {0.78f, 0.98f}, {0.92f, 0.88f}, {0.92f, 0.62f},
+			{0.80f, 0.52f}, {0.92f, 0.42f}, {0.92f, 0.14f}, {0.78f, 0.02f},
+			{0.12f, 0.02f}, {0.12f, 0.18f}, {0.68f, 0.18f}, {0.76f, 0.26f},
+			{0.76f, 0.38f}, {0.60f, 0.46f}, {0.32f, 0.46f}, {0.32f, 0.58f},
+			{0.60f, 0.58f}, {0.76f, 0.66f}, {0.76f, 0.80f}, {0.68f, 0.86f},
+			{0.12f, 0.86f}
+		};
+		xform_poly(tmp, three, (int)(sizeof(three) / sizeof(three[0])), ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(three) / sizeof(three[0])), z0, z1);
+		ox += cell_w + gap;
+	}
+	/* 2 */
+	{
+		static const vec2 two[] = {
+			{0.10f, 0.98f}, {0.78f, 0.98f}, {0.92f, 0.86f}, {0.92f, 0.58f},
+			{0.70f, 0.42f}, {0.28f, 0.22f}, {0.28f, 0.18f}, {0.90f, 0.18f},
+			{0.90f, 0.02f}, {0.10f, 0.02f}, {0.10f, 0.34f}, {0.55f, 0.56f},
+			{0.74f, 0.66f}, {0.74f, 0.80f}, {0.62f, 0.86f}, {0.10f, 0.86f}
+		};
+		xform_poly(tmp, two, (int)(sizeof(two) / sizeof(two[0])), ox, oy, sx, sy);
+		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(two) / sizeof(two[0])), z0, z1);
+	}
+}
+
+static void
+mesh_center_and_fit(vec3 *verts, int nv)
+{
+	int i;
+	float minx, maxx, miny, maxy, minz, maxz;
+	float cx, cy, cz;
+	if (nv <= 0)
+		return;
+	minx = maxx = verts[0].x;
+	miny = maxy = verts[0].y;
+	minz = maxz = verts[0].z;
+	for (i = 1; i < nv; i++) {
+		if (verts[i].x < minx) minx = verts[i].x;
+		if (verts[i].x > maxx) maxx = verts[i].x;
+		if (verts[i].y < miny) miny = verts[i].y;
+		if (verts[i].y > maxy) maxy = verts[i].y;
+		if (verts[i].z < minz) minz = verts[i].z;
+		if (verts[i].z > maxz) maxz = verts[i].z;
+	}
+	cx = 0.5f * (minx + maxx);
+	cy = 0.5f * (miny + maxy);
+	cz = 0.5f * (minz + maxz);
+	for (i = 0; i < nv; i++) {
+		verts[i].x -= cx;
+		verts[i].y -= cy;
+		verts[i].z -= cz;
+	}
+	g_half_w = 0.5f * (maxx - minx);
+	g_half_h = 0.5f * (maxy - miny);
+	if (g_half_w < 0.05f) g_half_w = 0.05f;
+	if (g_half_h < 0.05f) g_half_h = 0.05f;
+	{
+		float extent = g_half_w > g_half_h ? g_half_w : g_half_h;
+		g_cam = extent * 4.2f + (maxz - minz) * 1.5f;
+		if (g_cam < 6.0f) g_cam = 6.0f;
+	}
 }
 
 static void
@@ -324,82 +398,32 @@ rot_normal(float *nx, float *ny, float *nz, float ax, float ay, float az)
 	*nz = out.z;
 }
 
-/* Set once after mesh build: camera distance + fit so rest-pose width ≈ 60% screen. */
-static float g_cam = 8.0f;
-static float g_half_w = 1.0f;
-static float g_half_h = 1.0f;
-
-static void
-mesh_center_and_fit(vec3 *verts, int nv)
-{
-	int i;
-	float minx, maxx, miny, maxy, minz, maxz;
-	float cx, cy, cz;
-	if (nv <= 0)
-		return;
-	minx = maxx = verts[0].x;
-	miny = maxy = verts[0].y;
-	minz = maxz = verts[0].z;
-	for (i = 1; i < nv; i++) {
-		if (verts[i].x < minx) minx = verts[i].x;
-		if (verts[i].x > maxx) maxx = verts[i].x;
-		if (verts[i].y < miny) miny = verts[i].y;
-		if (verts[i].y > maxy) maxy = verts[i].y;
-		if (verts[i].z < minz) minz = verts[i].z;
-		if (verts[i].z > maxz) maxz = verts[i].z;
-	}
-	cx = 0.5f * (minx + maxx);
-	cy = 0.5f * (miny + maxy);
-	cz = 0.5f * (minz + maxz);
-	for (i = 0; i < nv; i++) {
-		verts[i].x -= cx;
-		verts[i].y -= cy;
-		verts[i].z -= cz;
-	}
-	g_half_w = 0.5f * (maxx - minx);
-	g_half_h = 0.5f * (maxy - miny);
-	if (g_half_w < 0.05f) g_half_w = 0.05f;
-	if (g_half_h < 0.05f) g_half_h = 0.05f;
-	/* Pull back so the word sits in frame with mild perspective (not in your face). */
-	{
-		float extent = g_half_w > g_half_h ? g_half_w : g_half_h;
-		g_cam = extent * 4.2f + (maxz - minz) * 1.5f;
-		if (g_cam < 6.0f) g_cam = 6.0f;
-	}
-}
-
 static int
-project(const vec3 *v, int cols, int rows, int *sx, int *sy, float *depth)
+project(const vec3 *v, int cols, int rows2, int *sx, int *sy, float *depth)
 {
 	float z = v->z + g_cam;
 	float px, py;
 	if (z < 0.5f)
 		return 0;
-	/*
-	 * Rest pose (v.z≈0): full mesh width 2*g_half_w maps to 60% of cols,
-	 * height 2*g_half_h maps to 60% of rows — pick the tighter fit so the
-	 * whole word stays inside ~60% of the screen and stays centered.
-	 */
 	{
 		float kx = (0.60f * (float)cols) / (2.0f * g_half_w);
-		float ky = (0.60f * (float)rows) / (2.0f * g_half_h);
+		float ky = (0.60f * (float)rows2) / (2.0f * g_half_h);
 		float k = kx < ky ? kx : ky;
 		px = v->x * k * (g_cam / z);
 		py = v->y * k * (g_cam / z);
 	}
 	*sx = cols / 2 + (int)(px + (px >= 0 ? 0.5f : -0.5f));
-	*sy = rows / 2 - (int)(py + (py >= 0 ? 0.5f : -0.5f));
+	*sy = rows2 / 2 - (int)(py + (py >= 0 ? 0.5f : -0.5f));
 	*depth = z;
 	return 1;
 }
 
-/* shade 0 = empty/star path uses separate; 1..8 = blue ramp (bright) */
 static void
-plot(unsigned char *fb, float *zb, int cols, int rows,
+plot(unsigned char *fb, float *zb, int cols, int rows2,
     int x, int y, float z, unsigned char shade)
 {
 	int i;
-	if (x < 0 || x >= cols || y < 0 || y >= rows)
+	if (x < 0 || x >= cols || y < 0 || y >= rows2)
 		return;
 	i = y * cols + x;
 	if (z < zb[i]) {
@@ -409,7 +433,7 @@ plot(unsigned char *fb, float *zb, int cols, int rows,
 }
 
 static void
-fill_tri(unsigned char *fb, float *zb, int cols, int rows,
+fill_tri(unsigned char *fb, float *zb, int cols, int rows2,
     int x0, int y0, float z0,
     int x1, int y1, float z1,
     int x2, int y2, float z2,
@@ -426,12 +450,12 @@ fill_tri(unsigned char *fb, float *zb, int cols, int rows,
 	if (y2 < miny) miny = y2;
 	maxy = y0 > y1 ? y0 : y1;
 	if (y2 > maxy) maxy = y2;
-	if (maxx < 0 || maxy < 0 || minx >= cols || miny >= rows)
+	if (maxx < 0 || maxy < 0 || minx >= cols || miny >= rows2)
 		return;
 	if (minx < 0) minx = 0;
 	if (miny < 0) miny = 0;
 	if (maxx >= cols) maxx = cols - 1;
-	if (maxy >= rows) maxy = rows - 1;
+	if (maxy >= rows2) maxy = rows2 - 1;
 
 	area = (float)((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0));
 	if (area > -1.0f && area < 1.0f)
@@ -452,32 +476,17 @@ fill_tri(unsigned char *fb, float *zb, int cols, int rows,
 			w1 /= area;
 			w2 /= area;
 			z = w0 * z0 + w1 * z1 + w2 * z2;
-			plot(fb, zb, cols, rows, x, y, z, shade);
+			plot(fb, zb, cols, rows2, x, y, z, shade);
 		}
 	}
 }
 
-static void
-fill_quad(unsigned char *fb, float *zb, int cols, int rows,
-    int x0, int y0, float z0,
-    int x1, int y1, float z1,
-    int x2, int y2, float z2,
-    int x3, int y3, float z3,
-    unsigned char shade)
-{
-	fill_tri(fb, zb, cols, rows, x0, y0, z0, x1, y1, z1, x2, y2, z2, shade);
-	fill_tri(fb, zb, cols, rows, x0, y0, z0, x2, y2, z2, x3, y3, z3, shade);
-}
-
-/* Map Lambert [0..1] → blue shade 1..8 (8 brightest). */
 static unsigned char
 blue_shade(float lambert)
 {
 	int s;
-	if (lambert < 0.0f)
-		lambert = 0.0f;
-	if (lambert > 1.0f)
-		lambert = 1.0f;
+	if (lambert < 0.0f) lambert = 0.0f;
+	if (lambert > 1.0f) lambert = 1.0f;
 	s = 1 + (int)(lambert * 7.0f + 0.5f);
 	if (s < 1) s = 1;
 	if (s > 8) s = 8;
@@ -485,9 +494,8 @@ blue_shade(float lambert)
 }
 
 static void
-emit_blue_cell(unsigned char shade)
+shade_rgb(unsigned char shade, int *r, int *g, int *b)
 {
-	/* Truecolor blues — classic Win32-ish cobalt ramp */
 	static const int rgb[9][3] = {
 		{0, 0, 0},
 		{8, 18, 64},
@@ -502,7 +510,44 @@ emit_blue_cell(unsigned char shade)
 	int i = shade;
 	if (i < 1) i = 1;
 	if (i > 8) i = 8;
-	printf("\033[48;2;%d;%d;%dm \033[0m", rgb[i][0], rgb[i][1], rgb[i][2]);
+	*r = rgb[i][0];
+	*g = rgb[i][1];
+	*b = rgb[i][2];
+}
+
+/* Half-block cell: upper fb row = fg, lower = bg of ▀ */
+static void
+emit_half(unsigned char top, unsigned char bot)
+{
+	int r1, g1, b1, r2, g2, b2;
+	int t_letter = (top >= 1 && top <= 8);
+	int b_letter = (bot >= 1 && bot <= 8);
+	int t_star = (top >= 200);
+	int b_star = (bot >= 200);
+
+	if (!t_letter && !b_letter && !t_star && !b_star) {
+		fputc(' ', stdout);
+		return;
+	}
+	if (t_letter)
+		shade_rgb(top, &r1, &g1, &b1);
+	else if (t_star) {
+		r1 = g1 = b1 = (top == 202) ? 220 : (top == 201 ? 170 : 120);
+	} else {
+		r1 = g1 = b1 = 0;
+	}
+	if (b_letter)
+		shade_rgb(bot, &r2, &g2, &b2);
+	else if (b_star) {
+		r2 = g2 = b2 = (bot == 202) ? 220 : (bot == 201 ? 170 : 120);
+	} else {
+		r2 = g2 = b2 = 0;
+	}
+
+	if (t_letter || b_letter || t_star || b_star) {
+		printf("\033[38;2;%d;%d;%d;48;2;%d;%d;%dm▀\033[0m",
+		    r1, g1, b1, r2, g2, b2);
+	}
 }
 
 int
@@ -515,13 +560,12 @@ arcsync_demo(void)
 	unsigned rng = (unsigned)time(NULL) ^ (unsigned)getpid();
 	struct termios old;
 	struct winsize ws;
-	int cols = 80, rows = 24;
+	int cols = 80, rows = 24, rows2;
 	int i, frame;
 	float ax = 0.18f, ay = 0.08f, az = 0.0f;
 	int have_tty = isatty(STDOUT_FILENO);
 	unsigned char *fb = NULL;
 	float *zb = NULL;
-	/* light in camera space, slightly above-left */
 	const float Lx = -0.35f, Ly = 0.55f, Lz = 0.75f;
 
 	verts = arcsync_xmalloc((size_t)MAX_VERT * sizeof(vec3));
@@ -535,10 +579,11 @@ arcsync_demo(void)
 		rows = ws.ws_row;
 	}
 	if (cols > FB_W) cols = FB_W;
-	if (rows > FB_H) rows = FB_H;
+	if (rows > FB_H / 2) rows = FB_H / 2;
+	rows2 = rows * 2;
 
-	fb = arcsync_xmalloc((size_t)cols * (size_t)rows);
-	zb = arcsync_xmalloc((size_t)cols * (size_t)rows * sizeof(float));
+	fb = arcsync_xmalloc((size_t)cols * (size_t)rows2);
+	zb = arcsync_xmalloc((size_t)cols * (size_t)rows2 * sizeof(float));
 
 	for (i = 0; i < STAR_N; i++)
 		star_reset(&stars[i], &rng, 0);
@@ -562,15 +607,14 @@ arcsync_demo(void)
 			if (stars[i].z < 0.08f)
 				star_reset(&stars[i], &rng, 1);
 		}
-		ax += 0.0165f; /* 25% slower */
+		ax += 0.0165f;
 		ay += 0.02475f;
 		az += 0.0105f;
 
-		memset(fb, 0, (size_t)cols * (size_t)rows);
-		for (i = 0; i < cols * rows; i++)
+		memset(fb, 0, (size_t)cols * (size_t)rows2);
+		for (i = 0; i < cols * rows2; i++)
 			zb[i] = 1e9f;
 
-		/* dim starfield (shade 0 kept; draw as fg dots later) — use zb only */
 		for (i = 0; i < STAR_N; i++) {
 			float z = stars[i].z;
 			int sx, sy;
@@ -578,10 +622,9 @@ arcsync_demo(void)
 			if (z < 0.08f)
 				continue;
 			sx = cols / 2 + (int)(stars[i].x / z * (cols * 0.2f));
-			sy = rows / 2 + (int)(stars[i].y / z * (rows * 0.2f));
-			/* encode stars as 200+brightness in fb when empty */
+			sy = rows2 / 2 + (int)(stars[i].y / z * (rows2 * 0.2f));
 			g = (unsigned char)(200 + (z < 0.3f ? 2 : (z < 0.65f ? 1 : 0)));
-			plot(fb, zb, cols, rows, sx, sy, 9.0f + z, g);
+			plot(fb, zb, cols, rows2, sx, sy, 9.0f + z, g);
 		}
 
 		for (i = 0; i < nv; i++)
@@ -590,30 +633,26 @@ arcsync_demo(void)
 		for (f = 0; f < nf; f++) {
 			float nx = faces[f].nx, ny = faces[f].ny, nz = faces[f].nz;
 			float ndot;
-			int x0, y0, x1, y1, x2, y2, x3, y3;
-			float z0, z1, z2, z3;
+			int x0, y0, x1, y1, x2, y2;
+			float z0, z1, z2;
 			unsigned char shade;
 
 			rot_normal(&nx, &ny, &nz, ax, ay, az);
-			/* back-face cull in view space (camera looks -Z toward +Z objects) */
 			if (nz < 0.05f)
 				continue;
 			ndot = nx * Lx + ny * Ly + nz * Lz;
 			if (ndot < 0.0f)
 				ndot = 0.0f;
-			/* ambient + diffuse */
 			shade = blue_shade(0.22f + 0.78f * ndot);
 
-			if (!project(&rverts[faces[f].i0], cols, rows, &x0, &y0, &z0))
+			if (!project(&rverts[faces[f].i0], cols, rows2, &x0, &y0, &z0))
 				continue;
-			if (!project(&rverts[faces[f].i1], cols, rows, &x1, &y1, &z1))
+			if (!project(&rverts[faces[f].i1], cols, rows2, &x1, &y1, &z1))
 				continue;
-			if (!project(&rverts[faces[f].i2], cols, rows, &x2, &y2, &z2))
+			if (!project(&rverts[faces[f].i2], cols, rows2, &x2, &y2, &z2))
 				continue;
-			if (!project(&rverts[faces[f].i3], cols, rows, &x3, &y3, &z3))
-				continue;
-			fill_quad(fb, zb, cols, rows,
-			    x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3, shade);
+			fill_tri(fb, zb, cols, rows2,
+			    x0, y0, z0, x1, y1, z1, x2, y2, z2, shade);
 		}
 
 		if (have_tty)
@@ -622,7 +661,7 @@ arcsync_demo(void)
 			int c;
 			if (i == rows - 1) {
 				const char *msg =
-				    " 1998 · arcsync — solid Win32 · q/esc ";
+				    " 1998 · arcsync — vector Win32 · q/esc ";
 				int len = (int)strlen(msg);
 				int off = (frame / 2) % (len + cols);
 				fputs("\033[36m", stdout);
@@ -634,17 +673,9 @@ arcsync_demo(void)
 				continue;
 			}
 			for (c = 0; c < cols; c++) {
-				unsigned char s = fb[i * cols + c];
-				if (s >= 1 && s <= 8) {
-					emit_blue_cell(s);
-				} else if (s >= 200) {
-					char ch = (s == 202) ? '*' : (s == 201 ? '+' : '.');
-					fputs("\033[38;5;250m", stdout);
-					fputc(ch, stdout);
-					fputs("\033[0m", stdout);
-				} else {
-					fputc(' ', stdout);
-				}
+				unsigned char top = fb[(i * 2) * cols + c];
+				unsigned char bot = fb[(i * 2 + 1) * cols + c];
+				emit_half(top, bot);
 			}
 			fputc('\n', stdout);
 		}
