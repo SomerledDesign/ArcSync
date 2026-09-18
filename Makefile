@@ -15,7 +15,7 @@ endif
 SRCS := src/main.c src/args.c src/util.c src/fs_dir.c src/copy.c src/thumbs.c src/html.c src/iso.c src/pipeline.c src/photos_db.c
 OBJS := $(SRCS:.c=.o) src/banner.o
 
-.PHONY: all clean strip install check-size test dist help
+.PHONY: all clean strip install uninstall check-size test dist help
 
 all: arcsync
 
@@ -44,6 +44,10 @@ install: arcsync
 	install -d $(PREFIX)/share/man/man1
 	-install -m 644 man/arcsync.1 $(PREFIX)/share/man/man1/arcsync.1
 
+uninstall:
+	rm -f $(PREFIX)/bin/arcsync
+	rm -f $(PREFIX)/share/man/man1/arcsync.1
+
 test: arcsync
 	./arcsync --version >/dev/null
 	./arcsync --help >/dev/null
@@ -61,4 +65,4 @@ clean:
 	rm -f arcsync $(OBJS) src/banner.o
 
 help:
-	@echo "targets: all strip check-size test install clean"
+	@echo "targets: all strip check-size test install uninstall clean"
