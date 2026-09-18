@@ -188,7 +188,7 @@ arcsync_parse_args(int argc, char **argv, arcsync_opts_t *opts)
 	if (opts->help || opts->version || opts->demo)
 		return 0;
 
-	/* demoscene egg: arcsync 1998 */
+	/* undocumented positional */
 	if (optind < argc && strcmp(argv[optind], "1998") == 0) {
 		opts->demo = 1;
 		return 0;
