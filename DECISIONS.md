@@ -11,3 +11,5 @@ Recorded 2026-09-17 with Kevin:
 | 233 KiB + no PhotoKit | hard | **Hard** |
 
 FDA: local-tools session may lack Full Disk Access for Photos.sqlite. Grant FDA to Terminal/Cursor before Photos mode.
+
+| Easter egg | — | Hidden `--demo`: ANSI starfield + spinning Win32 (BBS/demoscene nod); not in --help |

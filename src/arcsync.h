@@ -52,6 +52,7 @@ typedef struct {
 	int burn;
 	int help;
 	int version;
+	int demo;
 } arcsync_opts_t;
 
 typedef struct arcsync_asset {
@@ -147,5 +148,6 @@ int arcsync_make_iso(const arcsync_stage_t *st, const arcsync_opts_t *opts,
     const char *out_path);
 int arcsync_burn_iso(const char *iso_path, const arcsync_opts_t *opts);
 int arcsync_run_pipeline(arcsync_opts_t *opts);
+int arcsync_demo(void);
 
 #endif

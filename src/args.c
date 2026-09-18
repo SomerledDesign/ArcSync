@@ -124,6 +124,7 @@ arcsync_parse_args(int argc, char **argv, arcsync_opts_t *opts)
 		{ "burn",            no_argument,       NULL, 1017 },
 		{ "help",            no_argument,       NULL, 'h' },
 		{ "version",         no_argument,       NULL, 1018 },
+		{ "demo",            no_argument,       NULL, 1019 },
 		{ NULL, 0, NULL, 0 }
 	};
 
@@ -174,6 +175,7 @@ arcsync_parse_args(int argc, char **argv, arcsync_opts_t *opts)
 		case 1016: opts->force = 1; break;
 		case 1017: opts->burn = 1; break;
 		case 1018: opts->version = 1; break;
+		case 1019: opts->demo = 1; break;
 		case 'n': opts->dry_run = 1; break;
 		case 'v': opts->verbose = 1; break;
 		case 'q': opts->quiet = 1; break;
@@ -183,7 +185,7 @@ arcsync_parse_args(int argc, char **argv, arcsync_opts_t *opts)
 		}
 	}
 
-	if (opts->help || opts->version)
+	if (opts->help || opts->version || opts->demo)
 		return 0;
 
 	if (opts->library && opts->dir) {

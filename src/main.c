@@ -31,6 +31,9 @@ main(int argc, char **argv)
 		return 0;
 	}
 
+	if (opts.demo)
+		return arcsync_demo();
+
 	if (opts.verbose && !opts.json)
 		arcsync_banner();
 

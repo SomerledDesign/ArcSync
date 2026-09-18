@@ -1,6 +1,6 @@
 CC      ?= cc
 CFLAGS  ?= -std=c99 -Os -Wall -Wextra -Werror -fno-exceptions -D_DARWIN_C_SOURCE
-LDFLAGS ?= -lsqlite3 -framework CoreFoundation -framework ImageIO -framework CoreGraphics
+LDFLAGS ?= -lsqlite3 -lm -framework CoreFoundation -framework ImageIO -framework CoreGraphics
 PREFIX  ?= /usr/local
 
 UNAME_M := $(shell uname -m)
@@ -12,7 +12,7 @@ else
   $(error unsupported arch $(UNAME_M); need arm64 or x86_64 Darwin)
 endif
 
-SRCS := src/main.c src/args.c src/util.c src/fs_dir.c src/copy.c src/thumbs.c src/html.c src/iso.c src/pipeline.c src/photos_db.c
+SRCS := src/main.c src/args.c src/util.c src/fs_dir.c src/copy.c src/thumbs.c src/html.c src/iso.c src/pipeline.c src/photos_db.c src/demo.c
 OBJS := $(SRCS:.c=.o) src/banner.o
 
 .PHONY: all clean strip install uninstall check-size test dist help
