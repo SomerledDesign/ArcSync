@@ -567,7 +567,7 @@ arcsync_demo(void)
 			int c;
 			if (i == rows - 1) {
 				const char *msg =
-				    " 1998 · arcsync — block Win32 · q/esc ";
+				    " 1998 · arcsync — Win32 asm photo-CD · q/esc ";
 				int len = (int)strlen(msg);
 				int off = (frame / 2) % (len + cols);
 				fputs("\033[36m", stdout);
