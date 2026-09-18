@@ -16,7 +16,6 @@
 #define MAX_VERT 8192
 #define FB_W 200
 #define FB_H 120
-#define MAX_POLY 64
 
 static volatile sig_atomic_t g_stop;
 
@@ -28,7 +27,6 @@ on_sig(int sig)
 }
 
 typedef struct { float x, y, z; } vec3;
-typedef struct { float x, y; } vec2;
 typedef struct {
 	int i0, i1, i2; /* triangle */
 	float nx, ny, nz;
@@ -128,200 +126,103 @@ add_tri(face_t *faces, int *nf, vec3 *verts, int i0, int i1, int i2)
 	(*nf)++;
 }
 
-static float
-cross2(vec2 a, vec2 b, vec2 c)
-{
-	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
-
-static int
-point_in_tri(vec2 p, vec2 a, vec2 b, vec2 c)
-{
-	float c1 = cross2(a, b, p);
-	float c2 = cross2(b, c, p);
-	float c3 = cross2(c, a, p);
-	return (c1 >= 0 && c2 >= 0 && c3 >= 0) || (c1 <= 0 && c2 <= 0 && c3 <= 0);
-}
-
-/* Ear-clip a simple CCW polygon into tris; idx[] maps poly verts → mesh verts. */
+/* Axis-aligned box in letter space → world, extruded in Z. Guarantees front faces. */
 static void
-ear_clip_face(face_t *faces, int *nf, vec3 *verts,
-    const vec2 *poly, const int *idx, int n, int reverse)
+add_box_xy(face_t *faces, int *nf, vec3 *verts, int *nv,
+    float x0, float y0, float x1, float y1, float z0, float z1)
 {
-	int V[MAX_POLY];
-	int nv = n, guard;
-	int i;
-	if (n < 3)
-		return;
-	for (i = 0; i < n; i++)
-		V[i] = i;
-	guard = 0;
-	while (nv > 3 && guard < n * n) {
-		int ear = -1;
-		guard++;
-		for (i = 0; i < nv; i++) {
-			int i0 = V[(i + nv - 1) % nv];
-			int i1 = V[i];
-			int i2 = V[(i + 1) % nv];
-			vec2 a = poly[i0], b = poly[i1], c = poly[i2];
-			int j, ok;
-			if (cross2(a, b, c) <= 0.0f)
-				continue;
-			ok = 1;
-			for (j = 0; j < nv; j++) {
-				int t = V[j];
-				if (t == i0 || t == i1 || t == i2)
-					continue;
-				if (point_in_tri(poly[t], a, b, c)) {
-					ok = 0;
-					break;
-				}
-			}
-			if (ok) {
-				ear = i;
-				break;
-			}
-		}
-		if (ear < 0)
-			break;
-		{
-			int i0 = V[(ear + nv - 1) % nv];
-			int i1 = V[ear];
-			int i2 = V[(ear + 1) % nv];
-			if (reverse)
-				add_tri(faces, nf, verts, idx[i0], idx[i2], idx[i1]);
-			else
-				add_tri(faces, nf, verts, idx[i0], idx[i1], idx[i2]);
-			for (i = ear; i < nv - 1; i++)
-				V[i] = V[i + 1];
-			nv--;
-		}
-	}
-	if (nv == 3) {
-		if (reverse)
-			add_tri(faces, nf, verts, idx[V[0]], idx[V[2]], idx[V[1]]);
-		else
-			add_tri(faces, nf, verts, idx[V[0]], idx[V[1]], idx[V[2]]);
-	}
-}
-
-/* Extrude a closed 2D polygon (CCW) into a solid prism. */
-static void
-extrude_poly(face_t *faces, int *nf, vec3 *verts, int *nv,
-    const vec2 *poly, int n, float z0, float z1)
-{
-	int i;
-	int idx_f[MAX_POLY], idx_b[MAX_POLY];
-	if (n < 3 || n > MAX_POLY)
-		return;
-	for (i = 0; i < n; i++) {
-		idx_f[i] = add_vert(verts, nv, poly[i].x, poly[i].y, z1);
-		if (idx_f[i] < 0)
-			return;
-	}
-	for (i = 0; i < n; i++) {
-		idx_b[i] = add_vert(verts, nv, poly[i].x, poly[i].y, z0);
-		if (idx_b[i] < 0)
-			return;
-	}
-	ear_clip_face(faces, nf, verts, poly, idx_f, n, 0);
-	ear_clip_face(faces, nf, verts, poly, idx_b, n, 1);
-	for (i = 0; i < n; i++) {
-		int j = (i + 1) % n;
-		add_tri(faces, nf, verts, idx_f[i], idx_f[j], idx_b[j]);
-		add_tri(faces, nf, verts, idx_f[i], idx_b[j], idx_b[i]);
-	}
+	int i00, i10, i11, i01, j00, j10, j11, j01;
+	if (x1 < x0) { float t = x0; x0 = x1; x1 = t; }
+	if (y1 < y0) { float t = y0; y0 = y1; y1 = t; }
+	/* front (+Z) */
+	i00 = add_vert(verts, nv, x0, y0, z1);
+	i10 = add_vert(verts, nv, x1, y0, z1);
+	i11 = add_vert(verts, nv, x1, y1, z1);
+	i01 = add_vert(verts, nv, x0, y1, z1);
+	add_tri(faces, nf, verts, i00, i10, i11);
+	add_tri(faces, nf, verts, i00, i11, i01);
+	/* back (-Z) */
+	j00 = add_vert(verts, nv, x0, y0, z0);
+	j10 = add_vert(verts, nv, x1, y0, z0);
+	j11 = add_vert(verts, nv, x1, y1, z0);
+	j01 = add_vert(verts, nv, x0, y1, z0);
+	add_tri(faces, nf, verts, j00, j11, j10);
+	add_tri(faces, nf, verts, j00, j01, j11);
+	/* +X */
+	add_tri(faces, nf, verts, i10, j10, j11);
+	add_tri(faces, nf, verts, i10, j11, i11);
+	/* -X */
+	add_tri(faces, nf, verts, i00, i01, j01);
+	add_tri(faces, nf, verts, i00, j01, j00);
+	/* +Y */
+	add_tri(faces, nf, verts, i01, i11, j11);
+	add_tri(faces, nf, verts, i01, j11, j01);
+	/* -Y */
+	add_tri(faces, nf, verts, i00, j00, j10);
+	add_tri(faces, nf, verts, i00, j10, i10);
 }
 
 static void
-xform_poly(vec2 *out, const vec2 *in, int n, float ox, float oy, float sx, float sy)
+letter_box(face_t *faces, int *nf, vec3 *verts, int *nv,
+    float ox, float oy, float sx, float sy,
+    float u0, float v0, float u1, float v1, float z0, float z1)
 {
-	int i;
-	for (i = 0; i < n; i++) {
-		out[i].x = ox + in[i].x * sx;
-		out[i].y = oy + in[i].y * sy;
-	}
+	add_box_xy(faces, nf, verts, nv,
+	    ox + u0 * sx, oy + v0 * sy,
+	    ox + u1 * sx, oy + v1 * sy,
+	    z0, z1);
 }
 
-/*
- * Vector letter contours in unit cell [0..1] x [0..1], CCW outer.
- * Built as solid shapes (no holes) — classic demo-style block letters
- * with smooth outlines instead of voxel cubes.
- */
 static void
 build_win32(vec3 *verts, int *nv, face_t *faces, int *nf)
 {
 	float z0 = -0.22f, z1 = 0.22f;
 	float cell_w = 1.05f, gap = 0.14f;
+	float cell_h = 1.22f; /* a little more height */
 	float total = 5.0f * cell_w + 4.0f * gap;
 	float ox = -0.5f * total;
-	float oy = -0.5f;
-	float sx = cell_w, sy = 1.0f;
-	vec2 tmp[MAX_POLY];
+	float oy = -0.5f * cell_h;
+	float sx = cell_w, sy = cell_h;
 
 	*nv = 0;
 	*nf = 0;
 
-	/* Block W */
-	{
-		static const vec2 W[] = {
-			{0.00f, 1.00f}, {0.18f, 1.00f}, {0.32f, 0.42f}, {0.42f, 0.72f},
-			{0.58f, 0.72f}, {0.68f, 0.42f}, {0.82f, 1.00f}, {1.00f, 1.00f},
-			{0.78f, 0.00f}, {0.60f, 0.00f}, {0.50f, 0.38f}, {0.40f, 0.00f},
-			{0.22f, 0.00f}
-		};
-		xform_poly(tmp, W, (int)(sizeof(W) / sizeof(W[0])), ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(W) / sizeof(W[0])), z0, z1);
-		ox += cell_w + gap;
-	}
-	/* Block i */
-	{
-		static const vec2 stem[] = {
-			{0.34f, 0.00f}, {0.66f, 0.00f}, {0.66f, 0.62f}, {0.34f, 0.62f}
-		};
-		static const vec2 dot[] = {
-			{0.34f, 0.74f}, {0.66f, 0.74f}, {0.66f, 1.00f}, {0.34f, 1.00f}
-		};
-		xform_poly(tmp, stem, 4, ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
-		xform_poly(tmp, dot, 4, ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, 4, z0, z1);
-		ox += cell_w + gap;
-	}
-	/* Block n */
-	{
-		static const vec2 n[] = {
-			{0.08f, 0.00f}, {0.32f, 0.00f}, {0.32f, 0.58f},
-			{0.40f, 0.72f}, {0.60f, 0.72f}, {0.68f, 0.58f},
-			{0.68f, 0.00f}, {0.92f, 0.00f}, {0.92f, 0.78f},
-			{0.80f, 0.92f}, {0.20f, 0.92f}, {0.08f, 0.78f}
-		};
-		xform_poly(tmp, n, (int)(sizeof(n) / sizeof(n[0])), ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(n) / sizeof(n[0])), z0, z1);
-		ox += cell_w + gap;
-	}
-	/* Block 3 — orthogonal steps */
-	{
-		static const vec2 three[] = {
-			{0.08f, 1.00f}, {0.92f, 1.00f}, {0.92f, 0.80f}, {0.32f, 0.80f},
-			{0.32f, 0.58f}, {0.80f, 0.58f}, {0.92f, 0.46f}, {0.92f, 0.00f},
-			{0.08f, 0.00f}, {0.08f, 0.20f}, {0.70f, 0.20f}, {0.70f, 0.38f},
-			{0.20f, 0.38f}, {0.08f, 0.50f}
-		};
-		xform_poly(tmp, three, (int)(sizeof(three) / sizeof(three[0])), ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(three) / sizeof(three[0])), z0, z1);
-		ox += cell_w + gap;
-	}
-	/* Block 2 — orthogonal steps */
-	{
-		static const vec2 two[] = {
-			{0.08f, 1.00f}, {0.92f, 1.00f}, {0.92f, 0.78f}, {0.32f, 0.40f},
-			{0.32f, 0.20f}, {0.92f, 0.20f}, {0.92f, 0.00f}, {0.08f, 0.00f},
-			{0.08f, 0.38f}, {0.68f, 0.70f}, {0.68f, 0.80f}, {0.08f, 0.80f}
-		};
-		xform_poly(tmp, two, (int)(sizeof(two) / sizeof(two[0])), ox, oy, sx, sy);
-		extrude_poly(faces, nf, verts, nv, tmp, (int)(sizeof(two) / sizeof(two[0])), z0, z1);
-	}
+	/* W — left stem, mid-left diag bar as stepped boxes, mid-right, right stem */
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.00f, 0.00f, 0.16f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.84f, 0.00f, 1.00f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.16f, 0.00f, 0.36f, 0.22f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.28f, 0.18f, 0.48f, 0.48f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.40f, 0.42f, 0.60f, 0.72f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.52f, 0.18f, 0.72f, 0.48f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.64f, 0.00f, 0.84f, 0.22f, z0, z1);
+	ox += cell_w + gap;
+
+	/* i — stem + dot */
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.32f, 0.00f, 0.68f, 0.64f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.32f, 0.76f, 0.68f, 1.00f, z0, z1);
+	ox += cell_w + gap;
+
+	/* n — left stem, top bar, right stem, small shoulder */
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.08f, 0.00f, 0.32f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.32f, 0.72f, 0.68f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.68f, 0.00f, 0.92f, 1.00f, z0, z1);
+	ox += cell_w + gap;
+
+	/* 3 — top bar, mid bar, bottom bar, right column (with gaps) */
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.82f, 0.90f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.42f, 0.78f, 0.58f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.00f, 0.90f, 0.18f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.72f, 0.58f, 0.92f, 0.82f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.72f, 0.18f, 0.92f, 0.42f, z0, z1);
+	ox += cell_w + gap;
+
+	/* 2 — top bar, upper-right, diagonal steps, bottom bar */
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.82f, 0.90f, 1.00f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.70f, 0.58f, 0.90f, 0.82f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.48f, 0.42f, 0.78f, 0.62f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.26f, 0.26f, 0.56f, 0.46f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.18f, 0.40f, 0.34f, z0, z1);
+	letter_box(faces, nf, verts, nv, ox, oy, sx, sy, 0.10f, 0.00f, 0.90f, 0.18f, z0, z1);
 }
 
 static void
@@ -643,12 +544,12 @@ arcsync_demo(void)
 			unsigned char shade;
 
 			rot_normal(&nx, &ny, &nz, tip, yaw, 0.0f);
-			if (nz < 0.05f)
+			if (nz < 0.02f)
 				continue;
 			ndot = nx * Lx + ny * Ly + nz * Lz;
 			if (ndot < 0.0f)
 				ndot = 0.0f;
-			shade = blue_shade(0.22f + 0.78f * ndot);
+			shade = blue_shade(0.32f + 0.68f * ndot);
 
 			if (!project(&rverts[faces[f].i0], cols, rows2, &x0, &y0, &z0))
 				continue;
