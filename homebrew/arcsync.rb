@@ -2,7 +2,7 @@ class Arcsync < Formula
   desc "Archive a Photos library to a hybrid CD/DVD ISO"
   homepage "https://github.com/SomerledDesign/ArcSync"
   url "https://github.com/SomerledDesign/ArcSync/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "#{SHA}"
+  sha256 "b9d9fc2e87bcf5c2bb954a75281d534eedd89531d3a988093e7b6a1744439f5f"
   license "MIT"
   depends_on :macos
 
