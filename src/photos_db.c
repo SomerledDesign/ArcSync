@@ -23,6 +23,7 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts,
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <unistd.h>
 
 #define CD_EPOCH_OFFSET 978307200.0
@@ -111,6 +112,146 @@ column_exists(sqlite3 *db, const char *table, const char *col)
 	sqlite3_finalize(st);
 	return ok;
 }
+
+/* Minimum size to reject tiny icon derivatives. */
+#define DERIV_MIN_BYTES 8192
+
+static int
+deriv_ext_ok(const char *name)
+{
+	const char *dot = strrchr(name, '.');
+	char ext[8];
+	size_t i, n;
+	if (!dot || !dot[1])
+		return 0;
+	n = strlen(dot + 1);
+	if (n >= sizeof(ext))
+		return 0;
+	for (i = 0; i < n; i++) {
+		char c = dot[1 + i];
+		ext[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+	}
+	ext[n] = '\0';
+	return !strcmp(ext, "jpg") || !strcmp(ext, "jpeg") || !strcmp(ext, "heic") ||
+	    !strcmp(ext, "heif") || !strcmp(ext, "png") || !strcmp(ext, "mov") ||
+	    !strcmp(ext, "mp4") || !strcmp(ext, "m4v");
+}
+
+/* Pick largest suitable media file under dir (one level). */
+static int
+best_in_dir(const char *dir, char *out, size_t outsz, off_t *best_sz)
+{
+	DIR *d;
+	struct dirent *ent;
+	off_t best = *best_sz;
+	int found = 0;
+	char path[4096];
+
+	d = opendir(dir);
+	if (!d)
+		return 0;
+	while ((ent = readdir(d)) != NULL) {
+		struct stat sb;
+		if (ent->d_name[0] == '.')
+			continue;
+		if (!deriv_ext_ok(ent->d_name))
+			continue;
+		snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
+		if (stat(path, &sb) != 0 || !S_ISREG(sb.st_mode))
+			continue;
+		if (sb.st_size < DERIV_MIN_BYTES)
+			continue;
+		if (sb.st_size > best) {
+			best = sb.st_size;
+			snprintf(out, outsz, "%s", path);
+			found = 1;
+		}
+	}
+	closedir(d);
+	if (found)
+		*best_sz = best;
+	return found;
+}
+
+/*
+ * Locate a usable local Photos derivative/preview for uuid.
+ * Layouts vary by Photos version; try a small set of known roots.
+ */
+static int
+find_derivative(const char *library, const char *uuid, char *out, size_t outsz,
+    off_t *out_sz)
+{
+	char nodash[80], bases[8][4096];
+	size_t i, nbase = 0;
+	off_t best = 0;
+	char bestpath[4096];
+	int any = 0;
+
+	if (!uuid || !*uuid)
+		return 0;
+	bestpath[0] = '\0';
+
+	/* UUID without dashes (lowercase) */
+	{
+		size_t j = 0;
+		const char *p;
+		for (p = uuid; *p && j + 1 < sizeof(nodash); p++) {
+			if (*p != '-')
+				nodash[j++] = (*p >= 'A' && *p <= 'Z') ?
+				    (char)(*p - 'A' + 'a') : *p;
+		}
+		nodash[j] = '\0';
+	}
+
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/derivatives/%s", library, uuid);
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/derivatives/%s", library, nodash);
+	if (nodash[0]) {
+		char hex = nodash[0];
+		snprintf(bases[nbase++], sizeof(bases[0]),
+		    "%s/resources/derivatives/%c/%s", library, hex, nodash);
+		snprintf(bases[nbase++], sizeof(bases[0]),
+		    "%s/resources/derivatives/%c/%s", library, hex, uuid);
+	}
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/derivatives/masters/%s", library, uuid);
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/derivatives/masters/%s", library, nodash);
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/renders/%s", library, uuid);
+	snprintf(bases[nbase++], sizeof(bases[0]),
+	    "%s/resources/renders/%s", library, nodash);
+
+	for (i = 0; i < nbase; i++) {
+		struct stat sb;
+		char cand[4096];
+		if (stat(bases[i], &sb) != 0)
+			continue;
+		if (S_ISREG(sb.st_mode) && sb.st_size >= DERIV_MIN_BYTES &&
+		    deriv_ext_ok(bases[i])) {
+			if (sb.st_size > best) {
+				best = sb.st_size;
+				snprintf(bestpath, sizeof(bestpath), "%s", bases[i]);
+				any = 1;
+			}
+			continue;
+		}
+		if (S_ISDIR(sb.st_mode)) {
+			cand[0] = '\0';
+			if (best_in_dir(bases[i], cand, sizeof(cand), &best) && cand[0]) {
+				snprintf(bestpath, sizeof(bestpath), "%s", cand);
+				any = 1;
+			}
+		}
+	}
+	if (!any)
+		return 0;
+	snprintf(out, outsz, "%s", bestpath);
+	*out_sz = best;
+	return 1;
+}
+
 
 int
 arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_catalog_t *cat)
@@ -217,30 +358,47 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_cat
 
 		kind = (kind_i == 1) ? ARCSYNC_KIND_VIDEO : ARCSYNC_KIND_PHOTO;
 		snprintf(full, sizeof(full), "%s/originals/%s/%s", library, dir, file);
-		if (!(stat(full, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size > 0)) {
-			missing_selected++;
-			cat->n_missing++;
-			continue;
-		}
+		{
+			int is_deriv = 0;
+			char deriv[4096];
+			off_t dsz = 0;
 
-		a = arcsync_catalog_add_asset(cat);
-		a->id = arcsync_xstrdup(uuid ? uuid : "unknown");
-		a->src_path = arcsync_xstrdup(full);
-		a->orig_name = arcsync_xstrdup(file);
-		a->captured = captured;
-		a->bytes = (uint64_t)sb.st_size;
-		a->kind = kind;
-		a->thumb_rel = arcsync_aprintf("thumbs/%s.jpg", a->id);
-		a->album_title = arcsync_xstrdup("Library");
-		a->rel_album = arcsync_xstrdup("library");
-		cat->total_bytes += a->bytes;
-		if (kind == ARCSYNC_KIND_PHOTO)
-			cat->n_photos++;
-		else
-			cat->n_videos++;
-		alb = arcsync_catalog_find_or_add_album(cat, "Library", "library", NULL);
-		arcsync_album_add_asset(alb, cat->n_assets - 1);
-		local_selected++;
+			if (!(stat(full, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size > 0)) {
+				missing_selected++;
+				if (opts->cloud == ARCSYNC_CLOUD_DERIVATIVE &&
+				    uuid && find_derivative(library, uuid, deriv, sizeof(deriv), &dsz)) {
+					snprintf(full, sizeof(full), "%s", deriv);
+					sb.st_size = dsz;
+					is_deriv = 1;
+				} else {
+					cat->n_missing++;
+					continue;
+				}
+			}
+
+			a = arcsync_catalog_add_asset(cat);
+			a->id = arcsync_xstrdup(uuid ? uuid : "unknown");
+			a->src_path = arcsync_xstrdup(full);
+			a->orig_name = arcsync_xstrdup(file);
+			a->captured = captured;
+			a->bytes = (uint64_t)sb.st_size;
+			a->kind = kind;
+			a->derivative = is_deriv;
+			a->thumb_rel = arcsync_aprintf("thumbs/%s.jpg", a->id);
+			a->album_title = arcsync_xstrdup("Library");
+			a->rel_album = arcsync_xstrdup("library");
+			cat->total_bytes += a->bytes;
+			if (kind == ARCSYNC_KIND_PHOTO)
+				cat->n_photos++;
+			else
+				cat->n_videos++;
+			if (is_deriv)
+				cat->n_derivative++;
+			alb = arcsync_catalog_find_or_add_album(cat, "Library", "library", NULL);
+			arcsync_album_add_asset(alb, cat->n_assets - 1);
+			if (!is_deriv)
+				local_selected++;
+		}
 	}
 	sqlite3_finalize(st);
 	sqlite3_close(db);
@@ -260,13 +418,23 @@ arcsync_scan_photos(const char *library, const arcsync_opts_t *opts, arcsync_cat
 		    "When that dry-run exits 0, run your archive command again.\n"
 		    "\n"
 		    "To knowingly archive only what is already local:\n"
-		    "  arcsync --cloud skip ...\n",
+		    "  arcsync --cloud skip ...\n"
+		    "To fill holes with local previews (slideshow, not archive):\n"
+		    "  arcsync --cloud derivative ...\n",
 		    local_selected, missing_selected);
 		return 8;
 	}
+	if (!opts->quiet && cat->n_derivative > 0)
+		fprintf(stderr,
+		    "arcsync: warning  %zu files are optimized previews, not camera originals\n",
+		    cat->n_derivative);
 	if (!opts->quiet && cat->n_missing > 0)
 		fprintf(stderr, "arcsync: missing  %zu not on disk (see --cloud)\n",
 		    cat->n_missing);
+	if (!opts->quiet && opts->cloud == ARCSYNC_CLOUD_DERIVATIVE)
+		fprintf(stderr,
+		    "arcsync: cloud    %zu local originals, %zu derivatives, %zu still missing\n",
+		    local_selected, cat->n_derivative, cat->n_missing);
 	(void)rc;
 	return 0;
 }

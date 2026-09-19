@@ -94,7 +94,7 @@ ArcSync copies files that are **already on this Mac**. It does not download from
 |---|---|
 | `fail` (**default**) | Any selected non-original → exit **8**, nothing staged — safe for the one-liner |
 | `skip` | Local originals only; list the rest in `missing.txt` (knowingly incomplete) |
-| `derivative` | Fall back to local previews; tag `quality=derivative` — slideshow, not archive |
+| `derivative` | Local originals when present; else best local Photos preview under `resources/`; tag `quality=derivative` in `manifest.tsv`. Still-missing stay skipped. Exit 0 if anything copied. Slideshow, not archive. |
 
 ### Overnight pull, morning burn (family / Optimize Mac Storage)
 
@@ -116,6 +116,8 @@ arcsync --dir /Volumes/NAS/Jobs/2026 --media none --out job.iso
 ```
 
 That is the 2000-era workflow: the files were next to the machine because there was no cloud to hide them in.
+
+`--dir` names and sorts into `media/YYYY/MM/DD/` using capture time from EXIF (images) or QuickTime/movie metadata (videos) when ImageIO can read it; otherwise birthtime/mtime.
 
 **Full Disk Access:** Terminal (or iTerm) may need FDA to read `~/Pictures/Photos Library.photoslibrary`. The tool cannot grant that for you. Close Photos.app if the database copy fails on a lock.
 

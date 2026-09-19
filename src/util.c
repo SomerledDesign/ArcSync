@@ -1,4 +1,8 @@
 #include "arcsync.h"
+#if defined(__APPLE__) && !defined(ARCSYNC_NO_IMAGEIO)
+#include <CoreFoundation/CoreFoundation.h>
+#include <ImageIO/ImageIO.h>
+#endif
 
 #include <errno.h>
 #ifndef _WIN32
@@ -11,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 void *
@@ -357,4 +362,92 @@ arcsync_album_add_asset(arcsync_album_t *a, size_t asset_index)
 		a->cap_assets = ncap;
 	}
 	a->asset_idx[a->n_assets++] = asset_index;
+}
+
+/*
+ * Prefer EXIF / QuickTime capture time (ImageIO) over filesystem mtime.
+ * Darwin only; elsewhere returns fallback.
+ */
+time_t
+arcsync_file_captured(const char *path, time_t fallback)
+{
+#if defined(__APPLE__) && !defined(ARCSYNC_NO_IMAGEIO)
+	CFStringRef cpath = NULL;
+	CFURLRef url = NULL;
+	CGImageSourceRef src = NULL;
+	CFDictionaryRef props = NULL;
+	time_t got = (time_t)-1;
+
+	cpath = CFStringCreateWithCString(NULL, path, kCFStringEncodingUTF8);
+	if (!cpath)
+		return fallback;
+	url = CFURLCreateWithFileSystemPath(NULL, cpath, kCFURLPOSIXPathStyle, false);
+	CFRelease(cpath);
+	if (!url)
+		return fallback;
+	src = CGImageSourceCreateWithURL(url, NULL);
+	CFRelease(url);
+	if (!src)
+		return fallback;
+	props = CGImageSourceCopyPropertiesAtIndex(src, 0, NULL);
+	CFRelease(src);
+	if (!props)
+		return fallback;
+
+	{
+		CFDictionaryRef exif = CFDictionaryGetValue(props, kCGImagePropertyExifDictionary);
+		CFDictionaryRef tiff = CFDictionaryGetValue(props, kCGImagePropertyTIFFDictionary);
+		CFDictionaryRef qt = CFDictionaryGetValue(props, CFSTR("{QuickTime}"));
+		CFStringRef keys[] = {
+			NULL, NULL, NULL, NULL, NULL, NULL
+		};
+		CFDictionaryRef dicts[] = { exif, exif, tiff, qt, qt, qt };
+		/* filled below — DateTimeOriginal, Digitized, TIFF DateTime, QT dates */
+		int i;
+		keys[0] = kCGImagePropertyExifDateTimeOriginal;
+		keys[1] = kCGImagePropertyExifDateTimeDigitized;
+		keys[2] = kCGImagePropertyTIFFDateTime;
+		/* QuickTime string keys (ImageIO); CreationDate is common for MOV/MP4 */
+		keys[3] = CFSTR("CreationDate");
+		keys[4] = CFSTR("DateTimeOriginal");
+		keys[5] = CFSTR("CreateDate");
+
+		for (i = 0; i < 6; i++) {
+			CFTypeRef v;
+			char buf[64];
+			struct tm tm;
+			int Y, M, D, h, m, s;
+			if (!dicts[i] || !keys[i])
+				continue;
+			v = CFDictionaryGetValue(dicts[i], keys[i]);
+			if (!v || CFGetTypeID(v) != CFStringGetTypeID())
+				continue;
+			if (!CFStringGetCString((CFStringRef)v, buf, sizeof(buf),
+			    kCFStringEncodingUTF8))
+				continue;
+			/* "YYYY:MM:DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS..." */
+			if (sscanf(buf, "%d:%d:%d %d:%d:%d", &Y, &M, &D, &h, &m, &s) == 6 ||
+			    sscanf(buf, "%d-%d-%dT%d:%d:%d", &Y, &M, &D, &h, &m, &s) == 6 ||
+			    sscanf(buf, "%d-%d-%d %d:%d:%d", &Y, &M, &D, &h, &m, &s) == 6) {
+				memset(&tm, 0, sizeof(tm));
+				tm.tm_year = Y - 1900;
+				tm.tm_mon = M - 1;
+				tm.tm_mday = D;
+				tm.tm_hour = h;
+				tm.tm_min = m;
+				tm.tm_sec = s;
+				tm.tm_isdst = -1;
+				got = mktime(&tm);
+				if (got != (time_t)-1)
+					break;
+			}
+		}
+	}
+	CFRelease(props);
+	if (got != (time_t)-1)
+		return got;
+#else
+	(void)path;
+#endif
+	return fallback;
 }

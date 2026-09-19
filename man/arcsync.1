@@ -128,6 +128,13 @@ Print usage and exit 0.
 .It Fl -version
 Print the version banner (assembly souvenir) and exit 0.
 .El
+.Ss Directory mode (Fl -dir)
+Capture dates for naming and sorting come from EXIF
+.Pq images
+or QuickTime/movie metadata
+.Pq videos
+when available via ImageIO; otherwise file birthtime/mtime.
+.Pp
 .Sh ICLOUD AND OPTIMIZED LIBRARIES
 .Nm
 copies files that are already on this Mac. It does not download from iCloud.
@@ -205,11 +212,15 @@ them in.
 copies only local originals and skips anything still in iCloud.
 Useful for a deliberate test burn of whatever happens to be local.
 .Fl -cloud derivative
-is intended to fill holes with local previews and mark those rows
+copies local originals when present, otherwise the best local Photos
+preview under
+.Pa resources/
+(derivatives or renders), and marks those rows
 .Li quality=derivative
 in
 .Pa manifest.tsv .
-Treat that as a slideshow, not an archive. Family users who want the real files
+Assets with no local file at all are still skipped. Treat derivative mode
+as a slideshow, not an archive. Family users who want the real files
 should use
 .Fl -cloud fail
 after the overnight download, not derivative as a shortcut.

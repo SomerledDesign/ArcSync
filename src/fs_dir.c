@@ -44,14 +44,13 @@ kind_from_ext(const char *name)
 }
 
 static time_t
-best_mtime(const char *path, const struct stat *st)
+fs_fallback_time(const struct stat *st)
 {
 	time_t t = st->st_mtime;
-#if defined(st_birthtime) || defined(__APPLE__)
+#if defined(__APPLE__)
 	if (st->st_birthtimespec.tv_sec > 0)
 		t = st->st_birthtimespec.tv_sec;
 #endif
-	(void)path;
 	return t;
 }
 
@@ -122,7 +121,7 @@ walk(const char *root, const char *rel_dir, const char *album_title,
 			continue;
 		}
 		{
-			time_t captured = best_mtime(full, &st);
+			time_t captured = arcsync_file_captured(full, fs_fallback_time(&st));
 			arcsync_asset_t *a;
 			arcsync_album_t *alb;
 			size_t idx;
