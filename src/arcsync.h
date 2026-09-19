@@ -67,6 +67,7 @@ typedef struct arcsync_asset {
 	char *dest_rel;     /* media/YYYY/MM/DD/name */
 	char *thumb_rel;    /* thumbs/<id>.jpg */
 	int missing;
+	int derivative; /* 1 = local preview, not camera original */
 } arcsync_asset_t;
 
 typedef struct arcsync_album {
@@ -89,6 +90,7 @@ typedef struct {
 	size_t n_photos;
 	size_t n_videos;
 	size_t n_missing;
+	size_t n_derivative;
 	size_t n_skipped;
 } arcsync_catalog_t;
 
@@ -114,6 +116,7 @@ uint64_t arcsync_media_budget(arcsync_media_t m);
 const char *arcsync_media_name(arcsync_media_t m);
 int arcsync_parse_ymd(const char *s, struct tm *out);
 int arcsync_date_in_range(time_t t, const char *from, const char *to);
+time_t arcsync_file_captured(const char *path, time_t fallback);
 char *arcsync_sha12_hex(const char *s);
 void arcsync_rm_rf(const char *path);
 

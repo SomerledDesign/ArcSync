@@ -255,7 +255,7 @@ arcsync_write_sidecar(const arcsync_catalog_t *cat, const arcsync_stage_t *st,
 		    a->dest_rel ? a->dest_rel : "",
 		    (unsigned long long)a->bytes,
 		    a->kind == ARCSYNC_KIND_VIDEO ? "video" : "photo",
-		    a->missing ? "missing" : "original");
+		    a->missing ? "missing" : (a->derivative ? "derivative" : "original"));
 	}
 	fclose(fp);
 

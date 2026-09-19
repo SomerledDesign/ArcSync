@@ -1,6 +1,6 @@
-=== PIPELINE — 2026-09-17 ===
-Status: COMPLETE for --dir → thumbs → HTML → hdiutil ISO → --burn flag
-- util/fs_dir/copy/thumbs/html/iso/pipeline/photos_db
-- make test PASS (ISO attach + index.html)
-- Photos mode: copies DB, ZASSET discovery, local originals only; albums = Library bucket
-Next polish: album junction membership, derivative search, EXIF dates
+=== PIPELINE — 2026-09-19 ===
+Status: --cloud derivative hunt + --dir EXIF/QuickTime dating
+- photos_db: find local resources/derivatives|renders when original absent
+- fs_dir/util: ImageIO capture date before birthtime/mtime
+- manifest.tsv quality=derivative; exit 8 unchanged for --cloud fail
+Next: Mac strip size check; album junction membership
