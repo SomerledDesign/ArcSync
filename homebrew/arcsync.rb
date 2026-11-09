@@ -11,7 +11,7 @@ class Arcsync < Formula
   end
 
   test do
-    assert_match "arcsync 1.0.0", shell_output("#{bin}/arcsync --version 2>&1")
+    assert_match "arcsync 1.1.0", shell_output("#{bin}/arcsync --version 2>&1")
     assert_path_exists man1/"arcsync.1"
   end
 end

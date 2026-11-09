@@ -68,7 +68,7 @@ void
 arcsync_print_help(void)
 {
 	fputs(
-"arcsync 1.0.0 — archive a photo library to a hybrid CD/DVD ISO\n"
+"arcsync 1.1.0 — archive a photo library to a hybrid CD/DVD ISO\n"
 "\n"
 "usage: arcsync [options]\n"
 "\n"
