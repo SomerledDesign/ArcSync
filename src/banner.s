@@ -16,6 +16,6 @@ _arcsync_banner:
 
 	.section __TEXT,__cstring,cstring_literals
 Lmsg:
-	.ascii	"arcsync 1.0.0 \xE2\x80\x94 Win32 asm photo-CD tools, 1998; this is that program after the API grew up.\n"
+	.ascii	"arcsync 1.1.0 \xE2\x80\x94 Win32 asm photo-CD tools, 1998; this is that program after the API grew up.\n"
 Lmsg_end:
 	.set	Lmsg_len, Lmsg_end - Lmsg

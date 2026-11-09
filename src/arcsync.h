@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#define ARCSYNC_VERSION "1.0.0"
+#define ARCSYNC_VERSION "1.1.0"
 #define ARCSYNC_MAX_SIZE_BYTES (233 * 1024)
 
 typedef enum {
